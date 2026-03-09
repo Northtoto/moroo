@@ -1,0 +1,9 @@
+feat: Add production n8n workflow architecture and documentation
+
+- Comprehensive n8n workflow roadmap covering 15 workflows
+- User progress tracking and lesson management systems
+- Quiz/assessment engine and personalized learning paths
+- Audio and OCR correction workflow frameworks
+- Admin management, analytics, and notification systems
+- Error handling, validation, and health monitoring
+- Production deployment configuration with Docker

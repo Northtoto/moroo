@@ -5,28 +5,44 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  if (!user?.id) {
+    throw new Error('User not authenticated');
+  }
+
   // Fetch user profile
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user!.id)
+    .eq('id', user.id)
     .single();
 
+  if (profileError) {
+    throw new Error(`Failed to fetch profile: ${profileError.message}`);
+  }
+
   // Fetch enrollments with course info
-  const { data: enrollments } = await supabase
+  const { data: enrollments, error: enrollmentsError } = await supabase
     .from('enrollments')
     .select('*, course:courses(*)')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .order('enrolled_at', { ascending: false })
     .limit(5);
 
+  if (enrollmentsError) {
+    throw new Error(`Failed to fetch enrollments: ${enrollmentsError.message}`);
+  }
+
   // Fetch recent tutor messages
-  const { data: recentMessages } = await supabase
+  const { data: recentMessages, error: messagesError } = await supabase
     .from('messages')
     .select('*')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(5);
+
+  if (messagesError) {
+    throw new Error(`Failed to fetch messages: ${messagesError.message}`);
+  }
 
   const firstName = profile?.full_name?.split(' ')[0] || 'there';
 
@@ -95,28 +111,32 @@ export default async function DashboardPage() {
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Your Courses</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {enrollments.map((enrollment: Record<string, unknown>) => {
-              const course = enrollment.course as Record<string, unknown> | null;
-              if (!course) return null;
+            {enrollments.map((enrollment: any) => {
+              const course = enrollment.course;
+              if (!course || typeof course !== 'object' || !course.id || !course.title) {
+                return null;
+              }
+              const progress = typeof enrollment.progress === 'number' ? enrollment.progress : 0;
+              const level = typeof course.level === 'string' ? course.level : 'Unknown';
               return (
                 <Link
-                  key={enrollment.id as string}
-                  href={`/courses/${course.id}`}
+                  key={String(enrollment.id)}
+                  href={`/courses/${String(course.id)}`}
                   className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-medium">{course.title as string}</h3>
+                    <h3 className="text-white font-medium">{String(course.title)}</h3>
                     <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">
-                      {course.level as string}
+                      {level}
                     </span>
                   </div>
                   <div className="w-full bg-white/10 rounded-full h-1.5 mt-3">
                     <div
                       className="bg-blue-500 h-1.5 rounded-full transition-all"
-                      style={{ width: `${enrollment.progress as number}%` }}
+                      style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <p className="text-slate-500 text-xs mt-1">{enrollment.progress as number}% complete</p>
+                  <p className="text-slate-500 text-xs mt-1">{progress}% complete</p>
                 </Link>
               );
             })}
@@ -129,30 +149,35 @@ export default async function DashboardPage() {
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">Recent Corrections</h2>
           <div className="space-y-3">
-            {recentMessages.map((msg: Record<string, unknown>) => (
+            {recentMessages.map((msg: any) => {
+              const inputType = typeof msg.input_type === 'string' ? msg.input_type : 'text';
+              const originalContent = typeof msg.original_content === 'string' ? msg.original_content : '';
+              const createdAt = typeof msg.created_at === 'string' ? new Date(msg.created_at).toLocaleDateString() : 'Unknown';
+              return (
               <div
-                key={msg.id as string}
+                key={String(msg.id)}
                 className="bg-white/5 border border-white/10 rounded-xl p-4"
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    msg.input_type === 'text'
+                    inputType === 'text'
                       ? 'bg-blue-500/20 text-blue-400'
-                      : msg.input_type === 'audio'
+                      : inputType === 'audio'
                       ? 'bg-purple-500/20 text-purple-400'
                       : 'bg-amber-500/20 text-amber-400'
                   }`}>
-                    {msg.input_type as string}
+                    {inputType}
                   </span>
                   <span className="text-slate-500 text-xs">
-                    {new Date(msg.created_at as string).toLocaleDateString()}
+                    {createdAt}
                   </span>
                 </div>
                 <p className="text-slate-400 text-sm truncate">
-                  {(msg.original_content as string)?.substring(0, 100)}
+                  {originalContent.substring(0, 100)}
                 </p>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

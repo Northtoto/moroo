@@ -14,7 +14,9 @@
       "Bash(/c/Users/Administrateur/bin/gh.exe auth login --web --git-protocol https)",
       "mcp__Desktop_Commander__read_file",
       "Skill(anthropic-skills:create-pr)",
-      "Skill(anthropic-skills:create-pr:*)"
+      "Skill(anthropic-skills:create-pr:*)",
+      "mcp__windows-agent__read_local_file",
+      "mcp__Desktop_Commander__edit_block"
     ]
   }
 }

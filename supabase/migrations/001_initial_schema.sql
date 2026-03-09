@@ -33,7 +33,7 @@ CREATE TABLE lessons (
 -- Enrollments
 CREATE TABLE enrollments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
   progress INTEGER DEFAULT 0,
   enrolled_at TIMESTAMPTZ DEFAULT NOW(),
@@ -43,7 +43,7 @@ CREATE TABLE enrollments (
 -- Tutor sessions
 CREATE TABLE tutor_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_activity TIMESTAMPTZ DEFAULT NOW()
 );
@@ -52,7 +52,7 @@ CREATE TABLE tutor_sessions (
 CREATE TABLE messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES tutor_sessions(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   input_type TEXT CHECK (input_type IN ('text', 'audio', 'image')),
   original_content TEXT,
   corrected_content TEXT,
@@ -75,15 +75,35 @@ ALTER TABLE enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tutor_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
+-- Profiles policies
 CREATE POLICY "Users read own profile" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Anyone reads published courses" ON courses FOR SELECT USING (is_published = true);
-CREATE POLICY "Anyone reads lessons of published courses" ON lessons FOR SELECT
+
+-- Courses policies (only published courses visible to all)
+CREATE POLICY "Published courses visible to all" ON courses FOR SELECT USING (is_published = true);
+
+-- Lessons policies (only for published courses)
+CREATE POLICY "Lessons visible for published courses" ON lessons FOR SELECT
   USING (EXISTS (SELECT 1 FROM courses WHERE courses.id = lessons.course_id AND courses.is_published = true));
-CREATE POLICY "Users manage own enrollments" ON enrollments FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Users manage own sessions" ON tutor_sessions FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Users manage own messages" ON messages FOR ALL USING (auth.uid() = user_id);
+
+-- Enrollments policies (only users can see/manage their own)
+CREATE POLICY "Users select own enrollments" ON enrollments FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own enrollments" ON enrollments FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own enrollments" ON enrollments FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own enrollments" ON enrollments FOR DELETE USING (auth.uid() = user_id);
+
+-- Tutor sessions policies (only users can see/manage their own)
+CREATE POLICY "Users select own sessions" ON tutor_sessions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own sessions" ON tutor_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own sessions" ON tutor_sessions FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own sessions" ON tutor_sessions FOR DELETE USING (auth.uid() = user_id);
+
+-- Messages policies (only users can see/manage their own)
+CREATE POLICY "Users select own messages" ON messages FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own messages" ON messages FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own messages" ON messages FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own messages" ON messages FOR DELETE USING (auth.uid() = user_id);
 
 -- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION handle_new_user()

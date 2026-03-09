@@ -18,9 +18,21 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
-      });
+      
+      // Determine supported MIME type
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/wav')) {
+          mimeType = 'audio/wav';
+        } else if (MediaRecorder.isTypeSupported('audio/mp3')) {
+          mimeType = 'audio/mp3';
+        } else {
+          // Fallback to default, will attempt recording anyway
+          mimeType = '';
+        }
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -29,12 +41,18 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
+        const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setAudioURL(url);
-        const ext = mediaRecorder.mimeType.includes('webm') ? 'webm' : 'mp4';
+        // Determine file extension based on actual MIME type
+        let ext = 'webm';
+        if (mediaRecorder.mimeType.includes('wav')) ext = 'wav';
+        else if (mediaRecorder.mimeType.includes('mp3')) ext = 'mp3';
+        else if (mediaRecorder.mimeType.includes('ogg')) ext = 'ogg';
         onAudioReady(blob, `recording.${ext}`);
         stream.getTracks().forEach((t) => t.stop());
+        // Clean up the blob URL when done
+        URL.revokeObjectURL(url);
       };
 
       mediaRecorder.start(250);
@@ -65,6 +83,10 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
     if (file.size > 10 * 1024 * 1024) {
       alert('File too large. Maximum size is 10MB.');
       return;
+    }
+    // Clean up previous URL if it exists
+    if (audioURL) {
+      URL.revokeObjectURL(audioURL);
     }
     const url = URL.createObjectURL(file);
     setAudioURL(url);
