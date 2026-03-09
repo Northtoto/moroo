@@ -15,6 +15,13 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processImage = useCallback(async (file: File) => {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, GIF, WebP)');
+      return;
+    }
+
+    // Validate file size
     if (file.size > 5 * 1024 * 1024) {
       alert('Image too large. Maximum size is 5MB.');
       return;
@@ -39,10 +46,12 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
       const text = result.data.text.trim();
       setOcrText(text);
       onTextExtracted(text);
-    } catch {
-      alert('OCR processing failed. Please try a clearer image.');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      alert(`OCR processing failed: ${errorMsg}. Please try a clearer image.`);
     } finally {
       setProcessing(false);
+      URL.revokeObjectURL(url);
     }
   }, [onTextExtracted]);
 

@@ -6,29 +6,56 @@ import { useRouter } from 'next/navigation';
 
 export default function EnrollButton({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
   async function handleEnroll() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    setError(null);
 
-    await supabase
-      .from('enrollments')
-      .insert({ user_id: user.id, course_id: courseId });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setError('You must be logged in to enroll');
+        setLoading(false);
+        return;
+      }
 
-    router.refresh();
-    setLoading(false);
+      const { error: enrollError } = await supabase
+        .from('enrollments')
+        .insert({ user_id: user.id, course_id: courseId });
+
+      if (enrollError) {
+        if (enrollError.code === '23505') {
+          setError('You are already enrolled in this course');
+        } else {
+          setError(`Failed to enroll: ${enrollError.message}`);
+        }
+        setLoading(false);
+        return;
+      }
+
+      router.refresh();
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setLoading(false);
+    }
   }
 
   return (
-    <button
-      onClick={handleEnroll}
-      disabled={loading}
-      className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
-    >
-      {loading ? 'Enrolling...' : 'Enroll in Course'}
-    </button>
+    <div>
+      <button
+        onClick={handleEnroll}
+        disabled={loading}
+        className="mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
+      >
+        {loading ? 'Enrolling...' : 'Enroll in Course'}
+      </button>
+      {error && (
+        <p className="mt-2 text-sm text-red-400">{error}</p>
+      )}
+    </div>
   );
 }

@@ -16,9 +16,25 @@ export async function POST(request: NextRequest) {
     if (contentType.includes('multipart/form-data')) {
       // Audio file upload
       const formData = await request.formData();
-      const workflow = formData.get('workflow') as string;
-      formData.append('user_id', session.user.id);
-      formData.append('session_id', formData.get('session_id') as string || '');
+      const workflow = formData.get('workflow');
+      const sessionId = formData.get('session_id');
+      
+      if (!workflow || typeof workflow !== 'string') {
+        return NextResponse.json(
+          { error: 'Missing or invalid workflow parameter' },
+          { status: 400 }
+        );
+      }
+
+      if (!sessionId || typeof sessionId !== 'string') {
+        return NextResponse.json(
+          { error: 'Missing or invalid session_id parameter' },
+          { status: 400 }
+        );
+      }
+
+      formData.set('user_id', session.user.id);
+      formData.set('session_id', sessionId);
 
       const result = await callN8nWorkflowWithFile(workflow, formData, session.access_token);
       return NextResponse.json(result);
@@ -26,6 +42,13 @@ export async function POST(request: NextRequest) {
       // JSON request (text or OCR)
       const body = await request.json();
       const { workflow, ...data } = body;
+
+      if (!workflow || typeof workflow !== 'string') {
+        return NextResponse.json(
+          { error: 'Missing or invalid workflow parameter' },
+          { status: 400 }
+        );
+      }
 
       const result = await callN8nWorkflow(workflow, {
         ...data,
@@ -36,8 +59,16 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error('Tutor API error:', err);
+    
+    if (err instanceof SyntaxError) {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
+      { error: 'Failed to process request. Please try again.' },
       { status: 500 }
     );
   }

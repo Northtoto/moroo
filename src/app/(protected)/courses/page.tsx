@@ -14,16 +14,28 @@ export default async function CoursesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: courses } = await supabase
+  if (!user?.id) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data: courses, error: coursesError } = await supabase
     .from('courses')
     .select('*')
     .eq('is_published', true)
     .order('level', { ascending: true });
 
-  const { data: enrollments } = await supabase
+  if (coursesError) {
+    throw new Error(`Failed to fetch courses: ${coursesError.message}`);
+  }
+
+  const { data: enrollments, error: enrollmentsError } = await supabase
     .from('enrollments')
     .select('course_id, progress')
-    .eq('user_id', user!.id);
+    .eq('user_id', user.id);
+
+  if (enrollmentsError) {
+    throw new Error(`Failed to fetch enrollments: ${enrollmentsError.message}`);
+  }
 
   const enrolledMap = new Map(
     enrollments?.map((e: { course_id: string; progress: number }) => [e.course_id, e.progress]) || []
@@ -41,39 +53,50 @@ export default async function CoursesPage() {
       {courses && courses.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courses.map((course: Record<string, unknown>) => {
-            const isEnrolled = enrolledMap.has(course.id as string);
-            const progress = enrolledMap.get(course.id as string) || 0;
+            // Validate course data
+            if (!course || typeof course !== 'object' || !course.id || !course.title || !course.level) {
+              return null;
+            }
+            
+            const courseId = String(course.id);
+            const title = String(course.title);
+            const level = String(course.level);
+            const description = typeof course.description === 'string' ? course.description : '';
+            const imageUrl = typeof course.image_url === 'string' ? course.image_url : '';
+            const progress = typeof course.progress === 'number' ? course.progress : (enrolledMap.get(courseId) || 0);
+            const isEnrolled = enrolledMap.has(courseId);
+            
             return (
               <Link
-                key={course.id as string}
-                href={`/courses/${course.id}`}
+                key={courseId}
+                href={`/courses/${courseId}`}
                 className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:bg-white/10 transition-colors group"
               >
-                {course.image_url ? (
+                {imageUrl && (
                   <div className="h-36 bg-white/5 overflow-hidden">
                     <img
-                      src={course.image_url as string}
-                      alt={course.title as string}
+                      src={imageUrl}
+                      alt={title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                   </div>
-                ) : null}
+                )}
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      levelColors[course.level as string] || 'bg-slate-500/20 text-slate-400'
+                      levelColors[level] || 'bg-slate-500/20 text-slate-400'
                     }`}>
-                      {course.level as string}
+                      {level}
                     </span>
                     {isEnrolled && (
                       <span className="text-xs text-green-400">Enrolled</span>
                     )}
                   </div>
                   <h3 className="text-white font-semibold mt-1 group-hover:text-blue-300 transition-colors">
-                    {course.title as string}
+                    {title}
                   </h3>
                   <p className="text-slate-500 text-sm mt-1 line-clamp-2">
-                    {course.description as string}
+                    {description}
                   </p>
                   {isEnrolled && (
                     <div className="mt-3">

@@ -12,27 +12,39 @@ export default async function CourseDetailPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: course } = await supabase
+  if (!user?.id) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data: course, error: courseError } = await supabase
     .from('courses')
     .select('*')
     .eq('id', id)
     .eq('is_published', true)
     .single();
 
-  if (!course) notFound();
+  if (courseError || !course) notFound();
 
-  const { data: lessons } = await supabase
+  const { data: lessons, error: lessonsError } = await supabase
     .from('lessons')
     .select('*')
     .eq('course_id', id)
     .order('order_index', { ascending: true });
 
-  const { data: enrollment } = await supabase
+  if (lessonsError) {
+    throw new Error(`Failed to fetch lessons: ${lessonsError.message}`);
+  }
+
+  const { data: enrollment, error: enrollmentError } = await supabase
     .from('enrollments')
     .select('*')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .eq('course_id', id)
     .single();
+
+  if (enrollmentError && enrollmentError.code !== 'PGRST116') {
+    throw new Error(`Failed to fetch enrollment: ${enrollmentError.message}`);
+  }
 
   const levelColors: Record<string, string> = {
     A1: 'bg-green-500/20 text-green-400',
@@ -59,17 +71,21 @@ export default async function CourseDetailPage({
       <div className="bg-white/5 border border-white/10 rounded-xl p-6">
         <div className="flex items-start justify-between">
           <div>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              levelColors[course.level] || 'bg-slate-500/20 text-slate-400'
-            }`}>
-              {course.level}
-            </span>
-            <h1 className="text-2xl font-bold text-white mt-2">{course.title}</h1>
-            <p className="text-slate-400 mt-2">{course.description}</p>
+            {course && typeof course === 'object' && course.level && course.title && (
+              <>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  levelColors[String(course.level)] || 'bg-slate-500/20 text-slate-400'
+                }`}>
+                  {String(course.level)}
+                </span>
+                <h1 className="text-2xl font-bold text-white mt-2">{String(course.title)}</h1>
+                <p className="text-slate-400 mt-2">{typeof course.description === 'string' ? course.description : ''}</p>
+              </>
+            )}
           </div>
         </div>
 
-        {enrollment ? (
+        {enrollment && typeof enrollment === 'object' && typeof enrollment.progress === 'number' ? (
           <div className="mt-4">
             <div className="flex items-center justify-between text-sm mb-1">
               <span className="text-slate-400">Progress</span>
@@ -94,31 +110,41 @@ export default async function CourseDetailPage({
         </h2>
         {lessons && lessons.length > 0 ? (
           <div className="space-y-2">
-            {lessons.map((lesson: Record<string, unknown>, index: number) => (
-              <div
-                key={lesson.id as string}
-                className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-slate-500 font-mono text-sm w-8">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <div className="flex-1">
-                    <h3 className="text-white font-medium">{lesson.title as string}</h3>
-                    {lesson.content && typeof lesson.content === 'object' && (lesson.content as Record<string, string>).summary ? (
-                      <p className="text-slate-500 text-sm mt-1">
-                        {(lesson.content as Record<string, string>).summary}
-                      </p>
-                    ) : null}
+            {lessons.map((lesson: Record<string, unknown>, index: number) => {
+              if (!lesson || typeof lesson !== 'object' || !lesson.id || !lesson.title) {
+                return null;
+              }
+              
+              const lessonId = String(lesson.id);
+              const title = String(lesson.title);
+              const summary = lesson.content && typeof lesson.content === 'object' && (lesson.content as Record<string, unknown>).summary ? String((lesson.content as Record<string, string>).summary) : '';
+              
+              return (
+                <div
+                  key={lessonId}
+                  className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-500 font-mono text-sm w-8">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <div className="flex-1">
+                      <h3 className="text-white font-medium">{title}</h3>
+                      {summary && (
+                        <p className="text-slate-500 text-sm mt-1">
+                          {summary}
+                        </p>
+                      )}
+                    </div>
+                    {enrollment && (
+                      <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
                   </div>
-                  {enrollment && (
-                    <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-slate-500 text-sm">No lessons available yet.</p>
