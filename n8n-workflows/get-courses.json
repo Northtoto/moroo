@@ -1,0 +1,76 @@
+{
+  "name": "Get Courses",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "courses",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const webhookSecret = $input.first().json.headers?.['x-webhook-secret'];\n\nif (webhookSecret !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('Invalid webhook secret');\n}\n\nconst jwt = $input.first().json.headers?.authorization?.replace('Bearer ', '');\nreturn [{ json: { jwt } }];"
+      },
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/courses?is_published=eq.true&select=*",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.jwt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch Courses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [910, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Validate Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [{ "node": "Fetch Courses", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Courses": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

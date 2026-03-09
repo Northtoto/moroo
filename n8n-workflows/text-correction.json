@@ -1,0 +1,95 @@
+{
+  "name": "Text Correction",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "text-correction",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const jwt = $input.first().json.headers?.authorization?.replace('Bearer ', '');\nconst webhookSecret = $input.first().json.headers?.['x-webhook-secret'];\n\nif (webhookSecret !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('Invalid webhook secret');\n}\n\nreturn [{ json: { ...($input.first().json.body), jwt } }];"
+      },
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/{{ $env.AZURE_OPENAI_GPT_DEPLOYMENT }}/chat/completions?api-version={{ $env.AZURE_OPENAI_API_VERSION }}",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a German language tutor. The student submitted German text for correction. Correct grammar, spelling, and word order. Explain each correction in simple English. Be encouraging and educational. Always respond with valid JSON in this format: {\\\"corrected\\\": \\\"corrected text\\\", \\\"explanation\\\": \\\"detailed explanation of corrections\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Please correct this German text: {{ $json.text }}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1000\n}",
+        "options": {}
+      },
+      "name": "Azure GPT-5.2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const response = $input.first().json;\nconst content = response.choices?.[0]?.message?.content || '{}';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch {\n  parsed = {\n    corrected: content,\n    explanation: 'The AI returned a non-structured response.'\n  };\n}\n\nreturn [{\n  json: {\n    original: $('Validate Request').first().json.text,\n    corrected: parsed.corrected || '',\n    explanation: parsed.explanation || ''\n  }\n}];"
+      },
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Validate Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [{ "node": "Azure GPT-5.2", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure GPT-5.2": {
+      "main": [
+        [{ "node": "Parse Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

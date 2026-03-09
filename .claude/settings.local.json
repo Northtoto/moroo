@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \":*)",
+      "Bash(node -e \":*)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --use-npm)",
+      "Bash(npx create-next-app@latest morodeutsch-app --typescript --tailwind --app --src-dir --no-eslint --import-alias \"@/*\" --use-npm)",
+      "Bash(npm install @supabase/supabase-js @supabase/ssr tesseract.js)",
+      "Bash(npx next build)",
+      "Bash(npm install -g gh)",
+      "Bash(npm uninstall -g gh)",
+      "Bash(curl -sL https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_windows_amd64.zip -o /c/Users/Administrateur/Downloads/gh.zip)",
+      "Bash(/c/Users/Administrateur/bin/gh.exe auth status)",
+      "Bash(/c/Users/Administrateur/bin/gh.exe auth login --web --git-protocol https)",
+      "mcp__Desktop_Commander__read_file",
+      "Skill(anthropic-skills:create-pr)",
+      "Skill(anthropic-skills:create-pr:*)"
+    ]
+  }
+}
