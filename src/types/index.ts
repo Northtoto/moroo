@@ -4,6 +4,12 @@ export interface Profile {
   email: string;
   avatar_url: string | null;
   subscription_tier: 'free' | 'premium';
+  // Approval flow fields
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_at: string | null;
+  rejection_reason: string | null;
+  signup_source: string;
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }

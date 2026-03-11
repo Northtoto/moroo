@@ -39,14 +39,53 @@ export default function SignupPage() {
   if (success) {
     return (
       <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/10 text-center">
-        <h1 className="text-2xl font-bold text-white mb-4">Check your email</h1>
-        <p className="text-slate-400">
-          We sent a confirmation link to <span className="text-white font-medium">{email}</span>.
-          Click it to activate your account.
+        {/* Email icon */}
+        <div className="flex justify-center mb-5">
+          <div className="w-16 h-16 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+            <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+        </div>
+
+        <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
+        <p className="text-slate-400 mb-5">
+          We sent a confirmation link to{' '}
+          <span className="text-white font-medium">{email}</span>.
+          Click it to verify your address.
         </p>
+
+        {/* What happens next */}
+        <div className="bg-white/5 rounded-xl p-4 mb-5 text-left">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            What happens next
+          </p>
+          <ol className="space-y-2">
+            <li className="flex items-start gap-2 text-sm text-slate-400">
+              <span className="text-blue-400 font-semibold flex-shrink-0">1.</span>
+              <span>Click the link in your email to verify your address.</span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-slate-400">
+              <span className="text-blue-400 font-semibold flex-shrink-0">2.</span>
+              <span>
+                Your account will be reviewed to confirm your{' '}
+                <span className="text-white">Skool community membership</span>.
+              </span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-slate-400">
+              <span className="text-blue-400 font-semibold flex-shrink-0">3.</span>
+              <span>Once approved (typically within 1–2 hours), you will have full access.</span>
+            </li>
+          </ol>
+        </div>
+
+        <p className="text-xs text-slate-500 mb-5">
+          Make sure you signed up with the same email used on Skool.
+        </p>
+
         <Link
           href="/login"
-          className="inline-block mt-6 text-blue-400 hover:text-blue-300 font-medium"
+          className="inline-block text-blue-400 hover:text-blue-300 font-medium text-sm"
         >
           Back to login
         </Link>
@@ -58,7 +97,7 @@ export default function SignupPage() {
     <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-8 shadow-2xl border border-white/10">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Deutsche Meister</h1>
-        <p className="text-slate-400">Create your free account</p>
+        <p className="text-slate-400">For Skool community members</p>
       </div>
 
       <form onSubmit={handleSignup} className="space-y-5">

@@ -16,7 +16,11 @@
       "Skill(anthropic-skills:create-pr)",
       "Skill(anthropic-skills:create-pr:*)",
       "mcp__windows-agent__read_local_file",
-      "mcp__Desktop_Commander__edit_block"
+      "mcp__Desktop_Commander__edit_block",
+      "Bash(if not exist \"C:\\\\Users\\\\Administrateur\\\\Downloads\\\\morodeutsh\\\\.claude\" mkdir \"C:\\\\Users\\\\Administrateur\\\\Downloads\\\\morodeutsh\\\\.claude\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(xargs grep -l \"n8n\\\\|azure\\\\|openai\\\\|openrouter\" -i)",
+      "mcp__windows-agent__run_powershell"
     ]
   }
 }

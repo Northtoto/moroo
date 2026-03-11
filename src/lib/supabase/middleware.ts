@@ -37,22 +37,81 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protected routes - redirect to login if not authenticated
-  const protectedPaths = ['/dashboard', '/courses', '/tutor'];
-  const isProtectedRoute = protectedPaths.some(path =>
-    request.nextUrl.pathname.startsWith(path)
-  );
+  const pathname = request.nextUrl.pathname;
 
-  if (!user && isProtectedRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+  // ─── 1. Admin route protection (/admin/*) ──────────────────────────────────
+  // Requires: authenticated + is_admin = true
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.is_admin) {
+      // Not an admin — redirect to home, not an error page
+      const url = request.nextUrl.clone();
+      url.pathname = '/';
+      return NextResponse.redirect(url);
+    }
+
+    // is_admin = true → allow admin access
+    return supabaseResponse;
   }
 
-  // If logged in and trying to access auth pages, redirect to dashboard
+  // ─── 2. Course route protection (/dashboard, /courses, /tutor) ───────────
+  // Requires: authenticated + approval_status = 'approved'
+  const coursePaths = ['/dashboard', '/courses', '/tutor'];
+  const isCourseRoute = coursePaths.some(path => pathname.startsWith(path));
+
+  if (isCourseRoute) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('approval_status')
+      .eq('id', user.id)
+      .single();
+
+    // Profile missing (edge case: trigger hasn't run yet)
+    if (!profile) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/approval-pending';
+      return NextResponse.redirect(url);
+    }
+
+    if (profile.approval_status === 'pending') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/approval-pending';
+      return NextResponse.redirect(url);
+    }
+
+    if (profile.approval_status === 'rejected') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/access-denied';
+      url.searchParams.set('reason', 'rejected');
+      return NextResponse.redirect(url);
+    }
+
+    // approval_status = 'approved' → allow course access
+    return supabaseResponse;
+  }
+
+  // ─── 3. Auth page redirect ─────────────────────────────────────────────────
+  // Authenticated users visiting /login or /signup → send to dashboard
   if (
     user &&
-    (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')
+    (pathname === '/login' || pathname === '/signup')
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';

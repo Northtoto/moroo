@@ -41,12 +41,17 @@
         "bodyParameters": {
           "parameters": [
             {
+              "name": "file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "audio"
+            },
+            {
               "name": "language",
               "value": "de"
             },
             {
               "name": "response_format",
-              "value": "text"
+              "value": "json"
             }
           ]
         },

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import CorrectionDisplay from '@/components/correction/CorrectionDisplay';
 import AudioRecorder from '@/components/tutor/AudioRecorder';
 import ImageUploader from '@/components/tutor/ImageUploader';
@@ -14,6 +15,24 @@ export default function TutorPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CorrectionResult[]>([]);
   const [error, setError] = useState('');
+
+  // Session
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase
+        .from('tutor_sessions')
+        .insert({ user_id: user.id })
+        .select('id')
+        .single()
+        .then(({ data }) => {
+          if (data) setSessionId(data.id);
+        });
+    });
+  }, []);
 
   // Audio state
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -60,9 +79,14 @@ export default function TutorPage() {
 
   const handleAudioSubmit = () => {
     if (!audioBlob) return;
+    if (!sessionId) {
+      setError('Session not ready. Please wait a moment and try again.');
+      return;
+    }
     const formData = new FormData();
     formData.append('audio', audioBlob, audioFilename);
     formData.append('workflow', 'audio-correction');
+    formData.append('session_id', sessionId);
     submitCorrection('audio-correction', formData);
     setAudioBlob(null);
   };
