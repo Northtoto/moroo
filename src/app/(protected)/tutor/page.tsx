@@ -1,11 +1,22 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import CorrectionDisplay from '@/components/correction/CorrectionDisplay';
 import AudioRecorder from '@/components/tutor/AudioRecorder';
-import ImageUploader from '@/components/tutor/ImageUploader';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import type { CorrectionResult } from '@/types';
+
+// Lazy-load the heavy OCR component only when the image tab is active
+const ImageUploader = dynamic(() => import('@/components/tutor/ImageUploader'), {
+  loading: () => (
+    <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+      Loading OCR engine…
+    </div>
+  ),
+  ssr: false,
+});
 
 type Tab = 'text' | 'audio' | 'image';
 
@@ -15,9 +26,17 @@ export default function TutorPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CorrectionResult[]>([]);
   const [error, setError] = useState('');
-
-  // Session
   const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Audio state
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioFilename, setAudioFilename] = useState('');
+
+  // Image OCR state
+  const [ocrText, setOcrText] = useState('');
+
+  // Ref for textarea to enable keyboard shortcut
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -33,13 +52,6 @@ export default function TutorPage() {
         });
     });
   }, []);
-
-  // Audio state
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioFilename, setAudioFilename] = useState('');
-
-  // Image OCR state
-  const [ocrText, setOcrText] = useState('');
 
   const submitCorrection = useCallback(async (workflow: string, data: Record<string, unknown> | FormData) => {
     setLoading(true);
@@ -74,12 +86,20 @@ export default function TutorPage() {
     }
   }, []);
 
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!textInput.trim()) return;
+  const handleTextSubmit = useCallback((e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!textInput.trim() || loading) return;
     submitCorrection('text-correction', { text: textInput });
     setTextInput('');
-  };
+  }, [textInput, loading, submitCorrection]);
+
+  // Ctrl/Cmd + Enter shortcut in textarea
+  const handleTextareaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleTextSubmit();
+    }
+  }, [handleTextSubmit]);
 
   const handleAudioSubmit = () => {
     if (!audioBlob) return;
@@ -164,67 +184,78 @@ export default function TutorPage() {
         {activeTab === 'text' && (
           <form onSubmit={handleTextSubmit} className="space-y-4">
             <textarea
+              ref={textareaRef}
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Schreiben Sie Ihren deutschen Text hier... (Write your German text here...)"
+              onKeyDown={handleTextareaKeyDown}
+              placeholder="Schreiben Sie Ihren deutschen Text hier… (Write your German text here…)"
               rows={5}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
             />
-            <button
-              type="submit"
-              disabled={loading || !textInput.trim()}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
-            >
-              {loading ? 'Checking...' : 'Check My German'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={loading || !textInput.trim()}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
+              >
+                {loading ? 'Checking...' : 'Check My German'}
+              </button>
+              <span className="text-slate-600 text-xs hidden sm:block">
+                or press <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-slate-400">Ctrl</kbd>+<kbd className="bg-white/10 px-1.5 py-0.5 rounded text-slate-400">Enter</kbd>
+              </span>
+            </div>
           </form>
         )}
 
         {/* Audio Tab */}
         {activeTab === 'audio' && (
-          <div className="space-y-4">
-            <p className="text-slate-400 text-sm">
-              Record yourself speaking German or upload an audio file. We&apos;ll transcribe and correct it.
-            </p>
-            <AudioRecorder
-              onAudioReady={(blob, filename) => {
-                setAudioBlob(blob);
-                setAudioFilename(filename);
-              }}
-              disabled={loading}
-            />
-            {audioBlob && (
-              <button
-                onClick={handleAudioSubmit}
+          <ErrorBoundary>
+            <div className="space-y-4">
+              <p className="text-slate-400 text-sm">
+                Record yourself speaking German or upload an audio file. We&apos;ll transcribe and correct it.
+              </p>
+              <AudioRecorder
+                onAudioReady={(blob, filename) => {
+                  setAudioBlob(blob);
+                  setAudioFilename(filename);
+                }}
                 disabled={loading}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
-              >
-                {loading ? 'Processing...' : 'Submit for Correction'}
-              </button>
-            )}
-          </div>
+              />
+              {audioBlob && (
+                <button
+                  onClick={handleAudioSubmit}
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
+                >
+                  {loading ? 'Processing...' : 'Submit for Correction'}
+                </button>
+              )}
+            </div>
+          </ErrorBoundary>
         )}
 
-        {/* Image Tab */}
+        {/* Image Tab — lazy loaded */}
         {activeTab === 'image' && (
-          <div className="space-y-4">
-            <p className="text-slate-400 text-sm">
-              Upload a photo of your German homework or handwriting. We&apos;ll extract and correct the text.
-            </p>
-            <ImageUploader
-              onTextExtracted={setOcrText}
-              disabled={loading}
-            />
-            {ocrText && (
-              <button
-                onClick={handleImageSubmit}
+          <ErrorBoundary>
+            <div className="space-y-4">
+              <p className="text-slate-400 text-sm">
+                Upload a photo of your German homework or handwriting. We&apos;ll extract and correct the text.
+              </p>
+              <ImageUploader
+                onTextExtracted={setOcrText}
                 disabled={loading}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
-              >
-                {loading ? 'Processing...' : 'Submit for Correction'}
-              </button>
-            )}
-          </div>
+              />
+              {ocrText && (
+                <button
+                  onClick={handleImageSubmit}
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-semibold rounded-xl transition-colors text-sm"
+                >
+                  {loading ? 'Processing...' : 'Submit for Correction'}
+                </button>
+              )}
+            </div>
+          </ErrorBoundary>
         )}
       </div>
 
@@ -239,7 +270,7 @@ export default function TutorPage() {
       {loading && (
         <div className="bg-white/5 rounded-xl p-8 border border-white/10 text-center">
           <div className="inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 mt-3 text-sm">Analyzing your German...</p>
+          <p className="text-slate-400 mt-3 text-sm">Analyzing your German…</p>
         </div>
       )}
 
@@ -248,14 +279,15 @@ export default function TutorPage() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-white">Corrections</h2>
           {results.map((result, i) => (
-            <CorrectionDisplay
-              key={i}
-              original={result.original}
-              corrected={result.corrected}
-              explanation={result.explanation}
-              transcription={result.transcription}
-              inputType={result.inputType ?? 'text'}
-            />
+            <ErrorBoundary key={i}>
+              <CorrectionDisplay
+                original={result.original}
+                corrected={result.corrected}
+                explanation={result.explanation}
+                transcription={result.transcription}
+                inputType={result.inputType ?? 'text'}
+              />
+            </ErrorBoundary>
           ))}
         </div>
       )}

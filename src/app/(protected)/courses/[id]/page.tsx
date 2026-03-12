@@ -119,29 +119,38 @@ export default async function CourseDetailPage({
               const title = String(lesson.title);
               const summary = lesson.content && typeof lesson.content === 'object' && (lesson.content as Record<string, unknown>).summary ? String((lesson.content as Record<string, string>).summary) : '';
               
-              return (
-                <div
-                  key={lessonId}
-                  className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-500 font-mono text-sm w-8">
-                      {String(index + 1).padStart(2, '0')}
-                    </span>
-                    <div className="flex-1">
-                      <h3 className="text-white font-medium">{title}</h3>
-                      {summary && (
-                        <p className="text-slate-500 text-sm mt-1">
-                          {summary}
-                        </p>
-                      )}
-                    </div>
-                    {enrollment && (
-                      <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
+              const lessonEl = (
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-500 font-mono text-sm w-8">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="text-white font-medium">{title}</h3>
+                    {summary && (
+                      <p className="text-slate-500 text-sm mt-1">{summary}</p>
                     )}
                   </div>
+                  <svg className={`w-5 h-5 ${enrollment ? 'text-slate-400' : 'text-slate-700'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              );
+
+              return enrollment ? (
+                <Link
+                  key={lessonId}
+                  href={`/courses/${id}/lessons/${lessonId}`}
+                  className="block bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
+                >
+                  {lessonEl}
+                </Link>
+              ) : (
+                <div
+                  key={lessonId}
+                  title="Enroll in this course to access lessons"
+                  className="bg-white/5 border border-white/10 rounded-xl p-4 opacity-60 cursor-not-allowed"
+                >
+                  {lessonEl}
                 </div>
               );
             })}
