@@ -8,13 +8,13 @@ export default function EnrollButton({ courseId }: { courseId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createClient();
 
   async function handleEnroll() {
     setLoading(true);
     setError(null);
 
     try {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) {
         setError('You must be logged in to enroll');

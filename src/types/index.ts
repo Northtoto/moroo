@@ -10,6 +10,11 @@ export interface Profile {
   rejection_reason: string | null;
   signup_source: string;
   is_admin: boolean;
+  current_streak: number;
+  longest_streak: number;
+  last_activity_date: string | null;
+  german_level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | null;
+  learning_goal: string | null;
   created_at: string;
   updated_at: string;
 }
