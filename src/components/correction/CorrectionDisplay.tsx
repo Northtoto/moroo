@@ -1,5 +1,7 @@
 'use client';
 
+import { useCallback } from 'react';
+
 interface CorrectionDisplayProps {
   original: string;
   corrected: string;
@@ -15,6 +17,13 @@ export default function CorrectionDisplay({
   transcription,
   inputType,
 }: CorrectionDisplayProps) {
+  const speak = useCallback((text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'de-DE';
+    speechSynthesis.cancel(); // stop any ongoing speech first
+    speechSynthesis.speak(utterance);
+  }, []);
+
   return (
     <div className="space-y-4">
       {/* Transcription (audio/image only) */}
@@ -36,9 +45,19 @@ export default function CorrectionDisplay({
           <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{original}</p>
         </div>
         <div className="bg-green-500/5 rounded-xl p-4 border border-green-500/20">
-          <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">
-            Corrected
-          </h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">
+              Corrected
+            </h4>
+            <button
+              type="button"
+              onClick={() => speak(corrected)}
+              className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 transition-colors"
+              title="Listen to corrected German (de-DE)"
+            >
+              🔊 Listen
+            </button>
+          </div>
           <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{corrected}</p>
         </div>
       </div>

@@ -9,8 +9,8 @@
     },
     {
       "name": "n8n",
-      "runtimeExecutable": "n8n",
-      "runtimeArgs": ["start"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "n8n", "start"],
       "port": 5678
     }
   ]

@@ -62,7 +62,11 @@ export default function TutorPage() {
       }
 
       const result: CorrectionResult = await res.json();
-      setResults((prev) => [result, ...prev]);
+      const inputType: 'text' | 'audio' | 'image' =
+        workflow === 'audio-correction' ? 'audio'
+        : workflow === 'ocr-correction' ? 'image'
+        : 'text';
+      setResults((prev) => [{ ...result, inputType }, ...prev]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -250,7 +254,7 @@ export default function TutorPage() {
               corrected={result.corrected}
               explanation={result.explanation}
               transcription={result.transcription}
-              inputType={result.transcription ? 'audio' : 'text'}
+              inputType={result.inputType ?? 'text'}
             />
           ))}
         </div>

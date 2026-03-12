@@ -65,4 +65,5 @@ export interface CorrectionResult {
   corrected: string;
   explanation: string;
   transcription?: string;
+  inputType?: 'text' | 'audio' | 'image';
 }

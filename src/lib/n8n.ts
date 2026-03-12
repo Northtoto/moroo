@@ -10,7 +10,7 @@ function getEnvVar(key: string, defaultValue?: string): string {
 }
 
 const N8N_BASE = getEnvVar('N8N_WEBHOOK_BASE_URL', 'http://localhost:5678');
-const N8N_SECRET = process.env.N8N_WEBHOOK_SECRET || '';
+const N8N_SECRET = getEnvVar('N8N_WEBHOOK_SECRET');
 
 const WORKFLOW_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 2;
@@ -94,8 +94,6 @@ export async function callN8nWorkflowWithFile(
   if (!formData) {
     throw new Error('FormData is required');
   }
-
-  formData.append('jwt', jwt);
 
   const res = await callN8nWithRetry(workflow, {
     method: 'POST',

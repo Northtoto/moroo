@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface AudioRecorderProps {
   onAudioReady: (blob: Blob, filename: string) => void;
@@ -14,6 +14,14 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioURLRef = useRef<string | null>(null);
+
+  // Clean up blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current);
+    };
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
@@ -42,7 +50,10 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+        // Revoke previous URL before creating new one (safe — previous render is done)
+        if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current);
         const url = URL.createObjectURL(blob);
+        audioURLRef.current = url;
         setAudioURL(url);
         // Determine file extension based on actual MIME type
         let ext = 'webm';
@@ -51,8 +62,7 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
         else if (mediaRecorder.mimeType.includes('ogg')) ext = 'ogg';
         onAudioReady(blob, `recording.${ext}`);
         stream.getTracks().forEach((t) => t.stop());
-        // Clean up the blob URL when done
-        URL.revokeObjectURL(url);
+        // DO NOT revoke url here — React hasn't rendered <audio src={url}> yet
       };
 
       mediaRecorder.start(250);
@@ -84,11 +94,10 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
       alert('File too large. Maximum size is 10MB.');
       return;
     }
-    // Clean up previous URL if it exists
-    if (audioURL) {
-      URL.revokeObjectURL(audioURL);
-    }
+    // Clean up previous URL using ref
+    if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current);
     const url = URL.createObjectURL(file);
+    audioURLRef.current = url;
     setAudioURL(url);
     onAudioReady(file, file.name);
   };

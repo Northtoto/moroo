@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { callN8nWorkflow, callN8nWorkflowWithFile } from '@/lib/n8n';
 
+const ALLOWED_WORKFLOWS = ['text-correction', 'audio-correction', 'ocr-correction'] as const;
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -26,6 +28,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (!ALLOWED_WORKFLOWS.includes(workflow as typeof ALLOWED_WORKFLOWS[number])) {
+        return NextResponse.json({ error: 'Invalid workflow' }, { status: 400 });
+      }
+
       if (!sessionId || typeof sessionId !== 'string') {
         return NextResponse.json(
           { error: 'Missing or invalid session_id parameter' },
@@ -48,6 +54,10 @@ export async function POST(request: NextRequest) {
           { error: 'Missing or invalid workflow parameter' },
           { status: 400 }
         );
+      }
+
+      if (!ALLOWED_WORKFLOWS.includes(workflow as typeof ALLOWED_WORKFLOWS[number])) {
+        return NextResponse.json({ error: 'Invalid workflow' }, { status: 400 });
       }
 
       const result = await callN8nWorkflow(workflow, {
