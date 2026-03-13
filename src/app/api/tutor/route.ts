@@ -1,8 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { callN8nWorkflow, callN8nWorkflowWithFile } from '@/lib/n8n';
+import { z } from 'zod';
 
 const ALLOWED_WORKFLOWS = ['text-correction', 'audio-correction', 'ocr-correction'] as const;
+
+// ─── Input validation schemas ─────────────────────────────────────────────────
+
+const INJECTION_PATTERNS = [
+  /ignore previous instructions/i,
+  /system prompt/i,
+  /you are now/i,
+  /forget everything/i,
+  /disregard all prior/i,
+];
+
+function containsInjection(text: string): boolean {
+  return INJECTION_PATTERNS.some(p => p.test(text));
+}
+
+const safeText = z
+  .string()
+  .max(2000, 'Text must be 2000 characters or fewer')
+  .refine(t => !containsInjection(t), { message: 'Invalid content detected' });
+
+const TextCorrectionSchema = z.object({
+  workflow: z.literal('text-correction'),
+  text: safeText,
+  session_id: z.string().uuid().optional(),
+});
+
+const OcrCorrectionSchema = z.object({
+  workflow: z.literal('ocr-correction'),
+  ocr_text: safeText,
+  session_id: z.string().uuid().optional(),
+});
+
+const JsonPayloadSchema = z.discriminatedUnion('workflow', [
+  TextCorrectionSchema,
+  OcrCorrectionSchema,
+]);
+
+const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
 
 // Simple in-process rate limiter: max 20 requests per user per 60 seconds
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -121,6 +161,17 @@ export async function POST(request: NextRequest) {
       formData.set('user_id', user.id);
       formData.set('session_id', sessionId);
 
+      // Validate audio file size and MIME type server-side (never trust client headers alone)
+      const audioFile = formData.get('file');
+      if (audioFile instanceof File) {
+        if (!ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
+          return NextResponse.json({ error: 'Invalid audio format' }, { status: 400 });
+        }
+        if (audioFile.size > MAX_AUDIO_SIZE) {
+          return NextResponse.json({ error: 'Audio file must be under 10MB' }, { status: 400 });
+        }
+      }
+
       const result = await callN8nWorkflowWithFile(workflow, formData, accessToken);
 
       // Persist to DB (non-blocking)
@@ -132,18 +183,14 @@ export async function POST(request: NextRequest) {
     } else {
       // JSON request (text or OCR)
       const body = await request.json();
-      const { workflow, ...data } = body;
-
-      if (!workflow || typeof workflow !== 'string') {
+      const parsed = JsonPayloadSchema.safeParse(body);
+      if (!parsed.success) {
         return NextResponse.json(
-          { error: 'Missing or invalid workflow parameter' },
+          { error: parsed.error.issues[0]?.message ?? 'Invalid request' },
           { status: 400 }
         );
       }
-
-      if (!ALLOWED_WORKFLOWS.includes(workflow as typeof ALLOWED_WORKFLOWS[number])) {
-        return NextResponse.json({ error: 'Invalid workflow' }, { status: 400 });
-      }
+      const { workflow, ...data } = parsed.data;
 
       const result = await callN8nWorkflow(workflow, {
         ...data,
