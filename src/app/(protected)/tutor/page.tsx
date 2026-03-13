@@ -8,11 +8,10 @@ import AudioRecorder from '@/components/tutor/AudioRecorder';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import type { CorrectionResult } from '@/types';
 
-// Lazy-load the heavy OCR component only when the image tab is active
 const ImageUploader = dynamic(() => import('@/components/tutor/ImageUploader'), {
   loading: () => (
     <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-      Loading OCR engine…
+      Loading…
     </div>
   ),
   ssr: false,
@@ -32,8 +31,8 @@ export default function TutorPage() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioFilename, setAudioFilename] = useState('');
 
-  // Image OCR state
-  const [ocrText, setOcrText] = useState('');
+  // Image state
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // Ref for textarea to enable keyboard shortcut
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,9 +115,17 @@ export default function TutorPage() {
   };
 
   const handleImageSubmit = () => {
-    if (!ocrText.trim()) return;
-    submitCorrection('ocr-correction', { ocr_text: ocrText });
-    setOcrText('');
+    if (!imageFile) return;
+    if (!sessionId) {
+      setError('Session not ready. Please wait a moment and try again.');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('image', imageFile, imageFile.name);
+    formData.append('workflow', 'ocr-correction');
+    formData.append('session_id', sessionId);
+    submitCorrection('ocr-correction', formData);
+    setImageFile(null);
   };
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -242,10 +249,10 @@ export default function TutorPage() {
                 Upload a photo of your German homework or handwriting. We&apos;ll extract and correct the text.
               </p>
               <ImageUploader
-                onTextExtracted={setOcrText}
+                onFileReady={setImageFile}
                 disabled={loading}
               />
-              {ocrText && (
+              {imageFile && (
                 <button
                   onClick={handleImageSubmit}
                   disabled={loading}

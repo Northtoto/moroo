@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "functionCode": "const webhookSecret = $input.first().json.headers?.['x-webhook-secret'];\n\nif (webhookSecret !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('Invalid webhook secret');\n}\n\nreturn [{ json: $input.first().json.body }];"
+        "functionCode": "const webhookSecret = $input.first().json.headers?.['x-webhook-secret'];\n\nif (webhookSecret !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('Invalid webhook secret');\n}\n\nconst binary = $input.first().binary?.image;\nif (!binary) {\n  throw new Error('No image provided');\n}\n\nreturn [{\n  json: {\n    mimeType: binary.mimeType || 'image/jpeg',\n    base64Image: binary.data\n  }\n}];"
       },
       "name": "Validate Request",
       "type": "n8n-nodes-base.function",
@@ -37,17 +37,17 @@
           ]
         },
         "sendBody": true,
-        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a German language tutor. This text was extracted from a student's handwritten homework using OCR. Clean up OCR artifacts, correct German grammar, and explain corrections in simple English. Note potential OCR misreads (e.g., similar-looking characters). Respond as valid JSON: {\\\"corrected\\\": \\\"...\\\", \\\"explanation\\\": \\\"...\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Please correct this OCR-extracted German text: {{ $json.ocr_text }}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1000\n}",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a German language tutor. The student submitted a photo of handwritten or printed German text. First transcribe all visible German text from the image exactly as written, then correct grammar, spelling, and word order. Explain corrections in simple English. Respond as valid JSON: {\\\"extracted\\\": \\\"...\\\", \\\"corrected\\\": \\\"...\\\", \\\"explanation\\\": \\\"...\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"data:{{ $json.mimeType }};base64,{{ $json.base64Image }}\"\n          }\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"Please transcribe and correct the German text in this image.\"\n        }\n      ]\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1500\n}",
         "options": {}
       },
-      "name": "Azure GPT-5.2",
+      "name": "Azure GPT-4o Vision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [690, 300]
     },
     {
       "parameters": {
-        "functionCode": "const response = $input.first().json;\nconst content = response.choices?.[0]?.message?.content || '{}';\nconst ocrText = $('Validate Request').first().json.ocr_text || '';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch {\n  parsed = {\n    corrected: content,\n    explanation: 'The AI returned a non-structured response.'\n  };\n}\n\nreturn [{\n  json: {\n    original: ocrText,\n    transcription: ocrText,\n    corrected: parsed.corrected || '',\n    explanation: parsed.explanation || ''\n  }\n}];"
+        "functionCode": "const response = $input.first().json;\nconst content = response.choices?.[0]?.message?.content || '{}';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch {\n  parsed = {\n    extracted: '',\n    corrected: content,\n    explanation: 'The AI returned a non-structured response.'\n  };\n}\n\nconst extracted = parsed.extracted || '';\n\nreturn [{\n  json: {\n    original: extracted,\n    transcription: extracted,\n    corrected: parsed.corrected || '',\n    explanation: parsed.explanation || ''\n  }\n}];"
       },
       "name": "Parse Response",
       "type": "n8n-nodes-base.function",
@@ -73,10 +73,10 @@
     },
     "Validate Request": {
       "main": [
-        [{ "node": "Azure GPT-5.2", "type": "main", "index": 0 }]
+        [{ "node": "Azure GPT-4o Vision", "type": "main", "index": 0 }]
       ]
     },
-    "Azure GPT-5.2": {
+    "Azure GPT-4o Vision": {
       "main": [
         [{ "node": "Parse Response", "type": "main", "index": 0 }]
       ]

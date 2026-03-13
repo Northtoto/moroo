@@ -44,6 +44,9 @@ const JsonPayloadSchema = z.discriminatedUnion('workflow', [
 const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg'];
 
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 // Simple in-process rate limiter: max 20 requests per user per 60 seconds
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 20;
@@ -161,14 +164,27 @@ export async function POST(request: NextRequest) {
       formData.set('user_id', user.id);
       formData.set('session_id', sessionId);
 
-      // Validate audio file size and MIME type server-side (never trust client headers alone)
-      const audioFile = formData.get('audio');
-      if (audioFile instanceof File) {
-        if (!ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
-          return NextResponse.json({ error: 'Invalid audio format' }, { status: 400 });
+      // Validate file size and MIME type server-side (never trust client headers alone)
+      if (workflow === 'ocr-correction') {
+        const imageFile = formData.get('image');
+        if (!(imageFile instanceof File)) {
+          return NextResponse.json({ error: 'Missing image file' }, { status: 400 });
         }
-        if (audioFile.size > MAX_AUDIO_SIZE) {
-          return NextResponse.json({ error: 'Audio file must be under 10MB' }, { status: 400 });
+        if (!ALLOWED_IMAGE_TYPES.includes(imageFile.type)) {
+          return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
+        }
+        if (imageFile.size > MAX_IMAGE_SIZE) {
+          return NextResponse.json({ error: 'Image file must be under 5MB' }, { status: 400 });
+        }
+      } else {
+        const audioFile = formData.get('audio');
+        if (audioFile instanceof File) {
+          if (!ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
+            return NextResponse.json({ error: 'Invalid audio format' }, { status: 400 });
+          }
+          if (audioFile.size > MAX_AUDIO_SIZE) {
+            return NextResponse.json({ error: 'Audio file must be under 10MB' }, { status: 400 });
+          }
         }
       }
 
@@ -176,7 +192,9 @@ export async function POST(request: NextRequest) {
 
       // Persist to DB (non-blocking)
       const inputType = workflowToInputType(workflow);
-      const originalText = typeof result.transcription === 'string' ? result.transcription : '[audio upload]';
+      const originalText = typeof result.transcription === 'string'
+        ? result.transcription
+        : workflow === 'ocr-correction' ? '[image upload]' : '[audio upload]';
       saveCorrection(supabase, user.id, sessionId, inputType, originalText, result);
 
       return NextResponse.json(result);
