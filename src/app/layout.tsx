@@ -13,8 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Deutsche Meister - AI-Powered German Tutoring",
-  description: "Master German with AI-powered text correction, speech analysis, and OCR homework checking.",
+  title: {
+    default: "Deutsche Meister — AI-Powered German Tutoring",
+    template: "%s | Deutsche Meister",
+  },
+  description:
+    "Master German with AI-powered text correction, speech analysis, and OCR homework checking. Join our community of German learners.",
+  keywords: ["German learning", "AI tutor", "Deutsch lernen", "German grammar", "language learning"],
+  openGraph: {
+    title: "Deutsche Meister — AI-Powered German Tutoring",
+    description: "Master German with AI-powered corrections for text, audio, and handwritten homework.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -23,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="de-DE">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

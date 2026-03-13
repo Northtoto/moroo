@@ -12,6 +12,19 @@ function getEnvVar(key: string, defaultValue?: string): string {
 const N8N_BASE = getEnvVar('N8N_WEBHOOK_BASE_URL', 'http://localhost:5678');
 const N8N_SECRET = getEnvVar('N8N_WEBHOOK_SECRET');
 
+/** Returns true if the n8n service is reachable. */
+export async function checkN8nHealth(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${N8N_BASE}/healthz`, { signal: controller.signal });
+    clearTimeout(timeout);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 const WORKFLOW_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 2;
 
@@ -38,6 +51,12 @@ async function callN8nWithRetry(
     if (retries < MAX_RETRIES && error instanceof Error && error.name === 'AbortError') {
       console.warn(`Workflow "${workflow}" timeout, retrying... (${retries + 1}/${MAX_RETRIES})`);
       return callN8nWithRetry(workflow, init, retries + 1);
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('The AI service is taking too long to respond. Please try again in a moment.');
+    }
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('The AI service is currently unavailable. Please try again later.');
     }
     throw error;
   }

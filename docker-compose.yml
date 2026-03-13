@@ -9,7 +9,7 @@ services:
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:?Set N8N_PASSWORD in .env}
       - WEBHOOK_URL=${N8N_WEBHOOK_BASE_URL:-http://localhost:5678}
       - N8N_PROTOCOL=http
       - N8N_HOST=localhost
@@ -24,7 +24,7 @@ services:
       # Supabase for n8n to store/read data
       - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-changeme}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:?Set N8N_WEBHOOK_SECRET in .env}
     volumes:
       - n8n_data:/home/node/.n8n
     restart: unless-stopped

@@ -67,7 +67,7 @@ export async function updateSession(request: NextRequest) {
 
   // ─── 2. Course route protection (/dashboard, /courses, /tutor) ───────────
   // Requires: authenticated + approval_status = 'approved'
-  const coursePaths = ['/dashboard', '/courses', '/tutor'];
+  const coursePaths = ['/dashboard', '/courses', '/tutor', '/history', '/profile'];
   const isCourseRoute = coursePaths.some(path => pathname.startsWith(path));
 
   if (isCourseRoute) {

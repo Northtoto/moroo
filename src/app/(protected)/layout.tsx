@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import MobileNav from '@/components/layout/MobileNav';
 
 export default async function ProtectedLayout({
   children,
@@ -25,38 +26,23 @@ export default async function ProtectedLayout({
                 Deutsche Meister
               </Link>
               <div className="hidden md:flex gap-6">
-                <Link
-                  href="/dashboard"
-                  className="text-slate-400 hover:text-white transition-colors text-sm font-medium"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/courses"
-                  className="text-slate-400 hover:text-white transition-colors text-sm font-medium"
-                >
-                  Courses
-                </Link>
-                <Link
-                  href="/tutor"
-                  className="text-slate-400 hover:text-white transition-colors text-sm font-medium"
-                >
-                  AI Tutor
-                </Link>
+                <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors text-sm font-medium">Dashboard</Link>
+                <Link href="/courses" className="text-slate-400 hover:text-white transition-colors text-sm font-medium">Courses</Link>
+                <Link href="/tutor" className="text-slate-400 hover:text-white transition-colors text-sm font-medium">AI Tutor</Link>
+                <Link href="/history" className="text-slate-400 hover:text-white transition-colors text-sm font-medium">History</Link>
+                <Link href="/profile" className="text-slate-400 hover:text-white transition-colors text-sm font-medium">Profile</Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-slate-400 text-sm hidden sm:block">
+              <span className="text-slate-400 text-sm hidden lg:block">
                 {user.email}
               </span>
-              <form action="/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="text-sm text-slate-400 hover:text-white transition-colors"
-                >
+              <form action="/auth/signout" method="post" className="hidden md:block">
+                <button type="submit" className="text-sm text-slate-400 hover:text-white transition-colors">
                   Sign out
                 </button>
               </form>
+              <MobileNav userEmail={user.email ?? ''} />
             </div>
           </div>
         </div>
