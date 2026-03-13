@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
       formData.set('session_id', sessionId);
 
       // Validate audio file size and MIME type server-side (never trust client headers alone)
-      const audioFile = formData.get('file');
+      const audioFile = formData.get('audio');
       if (audioFile instanceof File) {
         if (!ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
           return NextResponse.json({ error: 'Invalid audio format' }, { status: 400 });
