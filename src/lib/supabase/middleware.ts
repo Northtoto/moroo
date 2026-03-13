@@ -65,7 +65,18 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ─── 2. Course route protection (/dashboard, /courses, /tutor) ───────────
+  // ─── 2. API route protection (/api/*) ────────────────────────────────────
+  // All API routes require authentication at minimum. Individual route handlers
+  // enforce additional checks (approval status, rate limiting, etc.).
+  if (pathname.startsWith('/api/')) {
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Authenticated — pass through to route handler for deeper validation.
+    return supabaseResponse;
+  }
+
+  // ─── 3. Course route protection (/dashboard, /courses, /tutor) ───────────
   // Requires: authenticated + approval_status = 'approved'
   const coursePaths = ['/dashboard', '/courses', '/tutor', '/history', '/profile'];
   const isCourseRoute = coursePaths.some(path => pathname.startsWith(path));
@@ -107,7 +118,7 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ─── 3. Auth page redirect ─────────────────────────────────────────────────
+  // ─── 4. Auth page redirect ─────────────────────────────────────────────────
   // Authenticated users visiting /login or /signup → send to dashboard
   if (
     user &&
