@@ -59,18 +59,37 @@ async function saveCorrection(
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!session) {
+  // SECURITY: getUser() makes a live server-side verification with Supabase.
+  // getSession() only reads the local cookie and can be forged.
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!checkRateLimit(session.user.id)) {
+  // SECURITY: Verify the user is approved before allowing any AI usage.
+  // Middleware protects the /tutor page but not this API route directly.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('approval_status')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.approval_status !== 'approved') {
+    return NextResponse.json({ error: 'Account not approved' }, { status: 403 });
+  }
+
+  if (!checkRateLimit(user.id)) {
     return NextResponse.json(
       { error: 'Too many requests. Please wait a moment before trying again.' },
       { status: 429 }
     );
   }
+
+  // Access token is still retrieved from session (read-only, not used for auth validation).
+  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? '';
 
   const contentType = request.headers.get('content-type') || '';
 
@@ -99,15 +118,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      formData.set('user_id', session.user.id);
+      formData.set('user_id', user.id);
       formData.set('session_id', sessionId);
 
-      const result = await callN8nWorkflowWithFile(workflow, formData, session.access_token);
+      const result = await callN8nWorkflowWithFile(workflow, formData, accessToken);
 
       // Persist to DB (non-blocking)
       const inputType = workflowToInputType(workflow);
       const originalText = typeof result.transcription === 'string' ? result.transcription : '[audio upload]';
-      saveCorrection(supabase, session.user.id, sessionId, inputType, originalText, result);
+      saveCorrection(supabase, user.id, sessionId, inputType, originalText, result);
 
       return NextResponse.json(result);
     } else {
@@ -128,15 +147,15 @@ export async function POST(request: NextRequest) {
 
       const result = await callN8nWorkflow(workflow, {
         ...data,
-        user_id: session.user.id,
-      }, session.access_token);
+        user_id: user.id,
+      }, accessToken);
 
       // Persist to DB (non-blocking)
       const inputType = workflowToInputType(workflow);
       const originalText = typeof data.text === 'string' ? data.text
         : typeof data.ocr_text === 'string' ? data.ocr_text
         : '';
-      saveCorrection(supabase, session.user.id, null, inputType, originalText, result);
+      saveCorrection(supabase, user.id, null, inputType, originalText, result);
 
       return NextResponse.json(result);
     }
