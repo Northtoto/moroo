@@ -28,6 +28,8 @@ export async function checkN8nHealth(): Promise<boolean> {
 const WORKFLOW_TIMEOUT = 30000; // 30 seconds
 const MAX_RETRIES = 2;
 
+const RETRYABLE_CODES = new Set(['ENOTFOUND', 'ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN']);
+
 async function callN8nWithRetry(
   workflow: string,
   init: RequestInit,
@@ -48,14 +50,15 @@ async function callN8nWithRetry(
       clearTimeout(timeout);
     }
   } catch (error) {
-    if (retries < MAX_RETRIES && error instanceof Error && error.name === 'AbortError') {
-      console.warn(`Workflow "${workflow}" timeout, retrying... (${retries + 1}/${MAX_RETRIES})`);
-      return callN8nWithRetry(workflow, init, retries + 1);
-    }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('The AI service is taking too long to respond. Please try again in a moment.');
     }
-    if (error instanceof TypeError && error.message.includes('fetch')) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (retries < MAX_RETRIES && code && RETRYABLE_CODES.has(code)) {
+      console.warn(`Workflow "${workflow}" network error (${code}), retrying... (${retries + 1}/${MAX_RETRIES})`);
+      return callN8nWithRetry(workflow, init, retries + 1);
+    }
+    if (error instanceof TypeError || (code && RETRYABLE_CODES.has(code))) {
       throw new Error('The AI service is currently unavailable. Please try again later.');
     }
     throw error;
