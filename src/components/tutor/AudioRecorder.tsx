@@ -15,6 +15,9 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioURLRef = useRef<string | null>(null);
+  const maxDurationRef = useRef<NodeJS.Timeout | null>(null);
+
+  const MAX_DURATION_SECONDS = 300;
 
   // Clean up blob URL on unmount
   useEffect(() => {
@@ -73,6 +76,10 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
       timerRef.current = setInterval(() => {
         setDuration((d) => d + 1);
       }, 1000);
+
+      maxDurationRef.current = setTimeout(() => {
+        stopRecording();
+      }, MAX_DURATION_SECONDS * 1000);
     } catch {
       alert('Microphone access denied. Please allow microphone access and try again.');
     }
@@ -84,6 +91,10 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (maxDurationRef.current) {
+      clearTimeout(maxDurationRef.current);
+      maxDurationRef.current = null;
     }
   }, []);
 
