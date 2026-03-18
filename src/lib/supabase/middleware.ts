@@ -1,20 +1,26 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { SECURITY_HEADERS } from '@/lib/security';
 
-function getEnvVar(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Error(`Missing environment variable: ${key}`);
-  }
-  return value;
-}
+// Static references required — Next.js inlines NEXT_PUBLIC_* at build time
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export async function updateSession(request: NextRequest) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
+  // ─── Apply security headers to every response ────────────────────────────
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    supabaseResponse.headers.set(key, value);
+  }
+
   const supabase = createServerClient(
-    getEnvVar('NEXT_PUBLIC_SUPABASE_URL'),
-    getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -25,22 +31,49 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
+          // Re-apply security headers after response recreation
+          for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+            supabaseResponse.headers.set(key, value);
+          }
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              // 2026 hardening: enforce secure cookie attributes
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+            })
           );
         },
       },
     }
   );
 
+  // Use getUser() instead of getSession() — validates JWT server-side
+  // getSession() only decodes the JWT without verification (insecure)
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // ─── 1. Admin route protection (/admin/*) ──────────────────────────────────
-  // Requires: authenticated + is_admin = true
+  // ─── Block suspicious request patterns ────────────────────────────────────
+  const suspiciousPatterns = [
+    /\.\.\//,            // Path traversal
+    /<script/i,          // XSS attempt
+    /union\s+select/i,   // SQL injection
+    /%00/,               // Null byte injection
+    /\/etc\/passwd/,     // File inclusion
+    /\/proc\/self/,      // Linux proc access
+  ];
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(pathname) || pattern.test(request.nextUrl.search)) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+  }
+
+  // ─── 1. Admin route protection (/admin/*) ─────────────────────────────────
   if (pathname.startsWith('/admin')) {
     if (!user) {
       const url = request.nextUrl.clone();
@@ -50,25 +83,30 @@ export async function updateSession(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, locked_until')
       .eq('id', user.id)
       .single();
 
+    // Check account lock
+    if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'account_locked');
+      return NextResponse.redirect(url);
+    }
+
     if (!profile?.is_admin) {
-      // Not an admin — redirect to home, not an error page
       const url = request.nextUrl.clone();
       url.pathname = '/';
       return NextResponse.redirect(url);
     }
 
-    // is_admin = true → allow admin access
     return supabaseResponse;
   }
 
-  // ─── 2. Course route protection (/dashboard, /courses, /tutor) ───────────
-  // Requires: authenticated + approval_status = 'approved'
-  const coursePaths = ['/dashboard', '/courses', '/tutor'];
-  const isCourseRoute = coursePaths.some(path => pathname.startsWith(path));
+  // ─── 2. Protected routes ─────────────────────────────────────────────────
+  const protectedPaths = ['/dashboard', '/courses', '/tutor', '/league', '/profile', '/progress', '/certificate', '/flashcards', '/lesen'];
+  const isCourseRoute = protectedPaths.some(path => pathname.startsWith(path));
 
   if (isCourseRoute) {
     if (!user) {
@@ -79,11 +117,18 @@ export async function updateSession(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('approval_status')
+      .select('approval_status, locked_until')
       .eq('id', user.id)
       .single();
 
-    // Profile missing (edge case: trigger hasn't run yet)
+    // Check account lock
+    if (profile?.locked_until && new Date(profile.locked_until) > new Date()) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'account_locked');
+      return NextResponse.redirect(url);
+    }
+
     if (!profile) {
       const url = request.nextUrl.clone();
       url.pathname = '/approval-pending';
@@ -103,16 +148,11 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // approval_status = 'approved' → allow course access
     return supabaseResponse;
   }
 
-  // ─── 3. Auth page redirect ─────────────────────────────────────────────────
-  // Authenticated users visiting /login or /signup → send to dashboard
-  if (
-    user &&
-    (pathname === '/login' || pathname === '/signup')
-  ) {
+  // ─── 3. Auth page redirect ────────────────────────────────────────────────
+  if (user && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

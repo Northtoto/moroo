@@ -5,13 +5,15 @@
       "name": "Next.js Dev",
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "npm", "run", "dev"],
-      "port": 3000
+      "port": 3000,
+      "autoPort": false
     },
     {
       "name": "n8n",
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "n8n", "start"],
-      "port": 5678
+      "port": 5678,
+      "autoPort": false
     }
   ]
 }

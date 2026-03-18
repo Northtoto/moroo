@@ -1,0 +1,27 @@
+{
+  "name": "Morodeutsch – KI Deutschtutor",
+  "short_name": "Morodeutsch",
+  "description": "KI-gestützter Deutschtutor mit Theory-of-Mind und Aussprache-Bewertung",
+  "start_url": "/tutor",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "de",
+  "screenshots": []
+}

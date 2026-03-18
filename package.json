@@ -8,12 +8,27 @@
     "start": "next start"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@stripe/stripe-js": "^8.9.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.98.0",
+    "@tsparticles/engine": "^3.9.1",
+    "@tsparticles/react": "^3.0.0",
+    "@tsparticles/slim": "^3.9.1",
+    "@upstash/redis": "^1.37.0",
+    "framer-motion": "^12.36.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tesseract.js": "^7.0.0"
+    "react-dropzone": "^15.0.0",
+    "react-hot-toast": "^2.6.0",
+    "react-speech-recognition": "^4.0.1",
+    "recharts": "^3.8.0",
+    "stripe": "^20.4.1",
+    "tesseract.js": "^7.0.0",
+    "ts-fsrs": "^5.2.3",
+    "web-speech-cognitive-services": "^8.1.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

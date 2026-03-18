@@ -1,0 +1,174 @@
+{
+  "name": "Morodeutsch — Streak Guardian (Daily 20:00)",
+  "active": true,
+  "nodes": [
+    {
+      "id": "node-cron-daily",
+      "name": "Cron Daily 20:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 400],
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 20,
+              "minute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-fetch-at-risk",
+      "name": "Fetch At-Risk Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [340, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/profiles?streak_count=gt.0&select=id,email,display_name,streak_count,last_submission_at",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-filter-no-submission",
+      "name": "Filter — No Submission Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 400],
+      "parameters": {
+        "jsCode": "// Filter users who have an active streak but haven't submitted today\nconst users = $input.all().map(item => item.json);\nconst now = new Date();\n\n// Define \"today\" as: the current calendar day in the server's local time\nconst todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());\nconst todayStartISO = todayStart.toISOString();\n\n// Filter: streak > 0 AND last_submission_at < today 00:00:00\nconst atRiskUsers = users.filter(user => {\n  if (!user.email) return false; // skip users with no email\n  if (!user.streak_count || user.streak_count <= 0) return false; // no active streak\n  \n  if (!user.last_submission_at) {\n    // Never submitted but somehow has a streak — include as at risk\n    return true;\n  }\n  \n  const lastSub = new Date(user.last_submission_at);\n  // At risk if last submission was before today\n  return lastSub < todayStart;\n});\n\nif (atRiskUsers.length === 0) {\n  // No at-risk users — return empty to end execution cleanly\n  return [];\n}\n\nreturn atRiskUsers.map(user => ({ json: user }));"
+      }
+    },
+    {
+      "id": "node-build-streak-email",
+      "name": "Build Streak Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 400],
+      "parameters": {
+        "jsCode": "const user = $input.first().json;\nconst { email, display_name, streak_count } = user;\nconst displayName = display_name || 'Student';\n\n// Calculate streak milestone messages\nlet streakMilestoneMsg = '';\nif (streak_count >= 30) {\n  streakMilestoneMsg = `<p style=\"color:#ff6b35; font-weight:bold;\">Du bist kurz davor, deinen 30-Tage-Meilenstein zu verlieren! 🏅</p>`;\n} else if (streak_count >= 7) {\n  streakMilestoneMsg = `<p style=\"color:#ff6b35; font-weight:bold;\">Dein ${streak_count}-Tage-Streak ist in Gefahr! ⚠️</p>`;\n}\n\n// Choose a motivational quote randomly from a pool\nconst quotes = [\n  { de: '\"Übung macht den Meister.\"', en: '\"Practice makes perfect.\"' },\n  { de: '\"Ohne Fleiß kein Preis.\"', en: '\"No pain, no gain.\"' },\n  { de: '\"Wer nicht wagt, der nicht gewinnt.\"', en: '\"Nothing ventured, nothing gained.\"' },\n  { de: '\"Lerne, als ob du ewig leben würdest.\"', en: '\"Learn as if you were to live forever.\"' },\n  { de: '\"Schritt für Schritt kommt man weit.\"', en: '\"Step by step one goes far.\"' }\n];\nconst quote = quotes[Math.floor(Math.random() * quotes.length)];\n\n// Quick 2-minute exercise suggestion based on streak level\nlet quickTask;\nif (streak_count < 5) {\n  quickTask = 'Schreib einen einfachen deutschen Satz, z.B.: \"Heute lerne ich Deutsch.\"';\n} else if (streak_count < 14) {\n  quickTask = 'Beschreib deinen Tag auf Deutsch in 2-3 Sätzen!';\n} else {\n  quickTask = 'Schreib einen kurzen Absatz (4-5 Sätze) auf Deutsch über ein Thema deiner Wahl.';\n}\n\nconst subject = `🔥 Dein ${streak_count}-Tage-Streak endet in 4 Stunden! — Morodeutsch`;\n\nconst htmlBody = `\n<!DOCTYPE html>\n<html lang=\"de\">\n<head><meta charset=\"UTF-8\"><title>Streak-Erinnerung</title></head>\n<body style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9f9f9; padding: 20px;\">\n  <div style=\"background: linear-gradient(135deg, #ff6b35, #f7c59f); padding: 20px; border-radius: 10px 10px 0 0; text-align: center;\">\n    <div style=\"font-size: 48px;\">🔥</div>\n    <h1 style=\"margin:0; color:white; font-size:22px;\">Dein Streak ist in Gefahr!</h1>\n    <p style=\"color:rgba(255,255,255,0.9); margin:5px 0 0;\">Nur noch 4 Stunden bis Mitternacht</p>\n  </div>\n  \n  <div style=\"background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);\">\n    <h2 style=\"color:#1a1a2e;\">Hallo ${displayName}! 👋</h2>\n    \n    <div style=\"background:#fff3cd; border:2px solid #ffc107; padding:20px; border-radius:10px; text-align:center; margin:20px 0;\">\n      <div style=\"font-size:40px; font-weight:bold; color:#ff6b35;\">${streak_count}</div>\n      <div style=\"font-size:16px; color:#666;\">Tage Streak</div>\n      ${streakMilestoneMsg}\n    </div>\n    \n    <p style=\"font-size:16px;\">Du hast heute noch keine Deutsch-Übung eingereicht. Dein <strong>${streak_count}-Tage-Streak</strong> endet in <strong>4 Stunden!</strong></p>\n    \n    <p>Nur eine kurze Einreichung reicht, um deinen Streak zu erhalten. Hier ist eine einfache Aufgabe:</p>\n    \n    <div style=\"background:#e8f5e9; border-left:4px solid #4caf50; padding:15px; border-radius:5px; margin:20px 0;\">\n      <h4 style=\"margin:0 0 8px; color:#2e7d32;\">⚡ 2-Minuten-Aufgabe</h4>\n      <p style=\"margin:0;\">${quickTask}</p>\n    </div>\n    \n    <div style=\"text-align:center; margin:25px 0;\">\n      <a href=\"{{ $env.APP_URL || 'https://morodeutsch.com' }}/submit\" \n         style=\"background:#4a6cf7; color:white; padding:15px 30px; border-radius:8px; text-decoration:none; font-size:16px; font-weight:bold; display:inline-block;\">\n        Jetzt Deutsch üben! 🚀\n      </a>\n    </div>\n    \n    <blockquote style=\"border-left:3px solid #ddd; padding-left:15px; color:#666; font-style:italic; margin:20px 0;\">\n      <p style=\"margin:0;\">${quote.de}</p>\n      <p style=\"margin:5px 0 0; font-size:12px;\">${quote.en}</p>\n    </blockquote>\n    \n    <p>Mach weiter so! Jeder Tag Deutsch macht einen Unterschied. 💪</p>\n    <p>— Das Morodeutsch-Team</p>\n    \n    <hr style=\"border:none; border-top:1px solid #eee; margin:20px 0;\">\n    <p style=\"font-size:11px; color:#999; text-align:center;\">\n      Du erhältst diese E-Mail, weil du einen aktiven Streak bei Morodeutsch hast.<br>\n      <a href=\"{{ $env.APP_URL || 'https://morodeutsch.com' }}/settings\" style=\"color:#999;\">Benachrichtigungen verwalten</a>\n    </p>\n  </div>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    to: email,\n    subject,\n    htmlBody,\n    user_id: user.id,\n    streak_count\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-send-streak-email",
+      "name": "Send Streak Warning Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1060, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:3000/api/admin/send-streak-email",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-secret",
+              "value": "={{ $vars.GWS_INTERNAL_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": {{ JSON.stringify($json.to) }},\n  \"subject\": {{ JSON.stringify($json.subject) }},\n  \"name\": {{ JSON.stringify($json.to.split('@')[0]) }},\n  \"streak\": {{ $json.streak_count }}\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-log-notification",
+      "name": "Log Notification Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/streak_notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"user_id\": {{ JSON.stringify($json.user_id) }},\n  \"streak_count_at_send\": {{ $json.streak_count }},\n  \"sent_at\": {{ JSON.stringify(new Date().toISOString()) }},\n  \"notification_type\": \"streak_warning\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Cron Daily 20:00": {
+      "main": [
+        [{ "node": "Fetch At-Risk Users", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch At-Risk Users": {
+      "main": [
+        [{ "node": "Filter — No Submission Today", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter — No Submission Today": {
+      "main": [
+        [{ "node": "Build Streak Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Streak Email": {
+      "main": [
+        [{ "node": "Send Streak Warning Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Streak Warning Email": {
+      "main": [
+        [{ "node": "Log Notification Sent", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": ["morodeutsch", "streak", "email", "retention"],
+  "versionId": "1.0.0"
+}

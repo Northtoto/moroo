@@ -1,5 +1,6 @@
 {
   "name": "OCR Correction",
+  "active": true,
   "nodes": [
     {
       "parameters": {

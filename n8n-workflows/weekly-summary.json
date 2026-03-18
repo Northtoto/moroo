@@ -1,0 +1,242 @@
+{
+  "name": "Morodeutsch — Weekly Summary (Sunday 18:00)",
+  "active": true,
+  "nodes": [
+    {
+      "id": "node-cron-weekly",
+      "name": "Cron Sunday 18:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 400],
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyWeek",
+              "hour": 18,
+              "minute": 0,
+              "weekday": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-fetch-active-users",
+      "name": "Fetch Active Users This Week",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [340, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages?created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}&select=user_id&order=user_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-dedupe-users",
+      "name": "Deduplicate User IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 400],
+      "parameters": {
+        "jsCode": "// Deduplicate user_ids from the messages response\nconst allRows = $input.all().map(item => item.json);\nconst uniqueUserIds = [...new Set(allRows.map(row => row.user_id).filter(Boolean))];\n\nif (uniqueUserIds.length === 0) {\n  return [{ json: { skipped: true, reason: 'No active users this week' } }];\n}\n\n// Return one item per unique user so SplitInBatches can iterate\nreturn uniqueUserIds.map(user_id => ({ json: { user_id } }));"
+      }
+    },
+    {
+      "id": "node-fetch-user-profile",
+      "name": "Fetch User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [820, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/profiles?id=eq.{{ $json.user_id }}&select=id,email,display_name,streak_count,total_xp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-fetch-week-corrections",
+      "name": "Fetch Week Corrections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1060, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages?user_id=eq.{{ $json[0].id }}&created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}&select=original_text,corrected_text,explanation,cefr_estimate,input_type,created_at&order=created_at.asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-build-summary-prompt",
+      "name": "Build Weekly Summary Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 400],
+      "parameters": {
+        "jsCode": "// Pull profile (array with one item from Supabase)\nconst profileArr = $('Fetch User Profile').first().json;\nconst profile = Array.isArray(profileArr) ? profileArr[0] : profileArr;\nconst displayName = profile?.display_name || 'Student';\nconst streak = profile?.streak_count || 0;\nconst totalXp = profile?.total_xp || 0;\nconst email = profile?.email || '';\n\n// Pull all corrections this week\nconst corrections = $input.all().map(item => item.json);\nconst correctionCount = corrections.length;\n\nif (!email) {\n  return [{ json: { skip: true, reason: 'No email for user ' + profile?.id } }];\n}\n\n// Format corrections for the prompt\nconst correctionSummary = corrections.slice(0, 10).map((c, i) => {\n  return `${i+1}. [${c.input_type || 'text'}] Original: \"${c.original_text}\" → Corrected: \"${c.corrected_text}\" | Level: ${c.cefr_estimate || 'N/A'}`;\n}).join('\\n');\n\nconst prompt = `You are Morodeutsch, an encouraging German tutor. Generate a personalized weekly summary for a student.\n\nStudent: ${displayName}\nThis week: ${correctionCount} submissions | Streak: ${streak} days | Total XP: ${totalXp}\n\nThis week's corrections (up to 10 shown):\n${correctionSummary || 'No corrections recorded.'}\n\nRespond with valid JSON:\n{\n  \"subject\": \"<email subject line in German, max 60 chars>\",\n  \"greeting\": \"<personalized greeting in German using student's name>\",\n  \"weekly_recap\": \"<2-3 sentence recap of their week's progress in English>\",\n  \"top_achievement\": \"<their single best moment or improvement this week>\",\n  \"top_tips\": [\n    \"<specific grammar tip 1 based on their actual errors>\",\n    \"<specific grammar tip 2 based on their actual errors>\",\n    \"<specific grammar tip 3 based on their actual errors>\"\n  ],\n  \"encouragement\": \"<warm closing message in English with one German phrase>\",\n  \"cefr_trend\": \"<brief observation about their CEFR level consistency or progression>\"\n}`;\n\nreturn [{\n  json: {\n    prompt,\n    email,\n    displayName,\n    streak,\n    totalXp,\n    correctionCount,\n    userId: profile?.id\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-gpt-summary",
+      "name": "GPT Weekly Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1540, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.prompt) }}\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 800,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-format-email",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400],
+      "parameters": {
+        "jsCode": "// Pull GPT response and format as HTML email\nconst gptResponse = $('GPT Weekly Summary').first().json;\nconst rawContent = gptResponse?.choices?.[0]?.message?.content || '{}';\n\nconst buildData = $('Build Weekly Summary Prompt').first().json;\nconst { email, displayName, streak, totalXp, correctionCount } = buildData;\n\nlet summary;\ntry {\n  summary = JSON.parse(rawContent);\n} catch (e) {\n  summary = {\n    subject: `Dein Wochenbericht – Morodeutsch`,\n    greeting: `Hallo ${displayName}!`,\n    weekly_recap: rawContent,\n    top_achievement: '',\n    top_tips: [],\n    encouragement: 'Mach weiter so! Keep going!',\n    cefr_trend: ''\n  };\n}\n\nconst tipsHtml = (summary.top_tips || []).map((tip, i) =>\n  `<li style=\"margin-bottom:8px;\"><strong>Tipp ${i+1}:</strong> ${tip}</li>`\n).join('');\n\nconst htmlBody = `\n<!DOCTYPE html>\n<html lang=\"de\">\n<head><meta charset=\"UTF-8\"><title>Morodeutsch Wochenbericht</title></head>\n<body style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9f9f9; padding: 20px;\">\n  <div style=\"background: #1a1a2e; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;\">\n    <h1 style=\"margin:0; font-size:24px;\">🇩🇪 Morodeutsch</h1>\n    <p style=\"margin:5px 0 0; opacity:0.8;\">Dein persönlicher Wochenbericht</p>\n  </div>\n  <div style=\"background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);\">\n    <h2 style=\"color:#1a1a2e;\">${summary.greeting}</h2>\n    \n    <div style=\"background:#f0f4ff; border-left:4px solid #4a6cf7; padding:15px; border-radius:5px; margin:20px 0;\">\n      <h3 style=\"margin:0 0 10px; color:#4a6cf7;\">📊 Diese Woche</h3>\n      <p style=\"margin:5px 0;\">✅ <strong>${correctionCount}</strong> Einreichungen</p>\n      <p style=\"margin:5px 0;\">🔥 <strong>${streak}</strong> Tage Streak</p>\n      <p style=\"margin:5px 0;\">⭐ <strong>${totalXp}</strong> Gesamt-XP</p>\n    </div>\n\n    <h3 style=\"color:#1a1a2e;\">📝 Wochenrückblick</h3>\n    <p>${summary.weekly_recap}</p>\n\n    ${summary.top_achievement ? `\n    <div style=\"background:#fff9e6; border:1px solid #ffd700; padding:15px; border-radius:5px; margin:20px 0;\">\n      <h4 style=\"margin:0 0 8px; color:#b8860b;\">🏆 Beste Leistung diese Woche</h4>\n      <p style=\"margin:0;\">${summary.top_achievement}</p>\n    </div>` : ''}\n\n    ${summary.cefr_trend ? `<p><em>${summary.cefr_trend}</em></p>` : ''}\n\n    ${tipsHtml ? `\n    <h3 style=\"color:#1a1a2e;\">💡 Deine 3 Lerntipps für nächste Woche</h3>\n    <ul style=\"padding-left:20px;\">${tipsHtml}</ul>` : ''}\n\n    <div style=\"background:#e8f5e9; border-left:4px solid #4caf50; padding:15px; border-radius:5px; margin:20px 0;\">\n      <p style=\"margin:0; font-style:italic;\">${summary.encouragement}</p>\n    </div>\n\n    <hr style=\"border:none; border-top:1px solid #eee; margin:20px 0;\">\n    <p style=\"font-size:12px; color:#999; text-align:center;\">\n      Morodeutsch — Dein KI-Deutschtutor | Du erhältst diese E-Mail, weil du diese Woche aktiv warst.\n    </p>\n  </div>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    to: email,\n    subject: summary.subject || `Dein Wochenbericht – Morodeutsch`,\n    htmlBody,\n    displayName\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-send-email",
+      "name": "Send Weekly Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2020, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:3000/api/admin/send-weekly-email",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-secret",
+              "value": "={{ $vars.GWS_INTERNAL_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": {{ JSON.stringify($json.to) }},\n  \"subject\": {{ JSON.stringify($json.subject) }},\n  \"html\": {{ JSON.stringify($json.htmlBody) }}\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Cron Sunday 18:00": {
+      "main": [
+        [{ "node": "Fetch Active Users This Week", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Active Users This Week": {
+      "main": [
+        [{ "node": "Deduplicate User IDs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Deduplicate User IDs": {
+      "main": [
+        [{ "node": "Fetch User Profile", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch User Profile": {
+      "main": [
+        [{ "node": "Fetch Week Corrections", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Week Corrections": {
+      "main": [
+        [{ "node": "Build Weekly Summary Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Weekly Summary Prompt": {
+      "main": [
+        [{ "node": "GPT Weekly Summary", "type": "main", "index": 0 }]
+      ]
+    },
+    "GPT Weekly Summary": {
+      "main": [
+        [{ "node": "Format Email Body", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Email Body": {
+      "main": [
+        [{ "node": "Send Weekly Email", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": ["morodeutsch", "weekly-summary", "email"],
+  "versionId": "1.0.0"
+}

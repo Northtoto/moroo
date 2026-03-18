@@ -1,0 +1,168 @@
+{
+  "name": "Morodeutsch — Adaptive Exercise Generator",
+  "active": true,
+  "nodes": [
+    {
+      "id": "node-webhook-exercise",
+      "name": "Webhook Generate Exercise",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 400],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-exercise",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      }
+    },
+    {
+      "id": "node-validate-exercise",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 400],
+      "parameters": {
+        "jsCode": "// Validate webhook secret\nconst secret = $input.first().json.headers?.['x-webhook-secret'];\nif (!secret || secret !== $env.WEBHOOK_SECRET) {\n  throw new Error('Unauthorized: invalid or missing x-webhook-secret header');\n}\n\n// Parse body\nconst body = $input.first().json.body || $input.first().json;\nconst { user_id, difficulty_override } = body;\n\nif (!user_id) {\n  throw new Error('Invalid request: user_id is required');\n}\n\nreturn [{\n  json: {\n    user_id,\n    difficulty_override: difficulty_override || null\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-fetch-error-categories",
+      "name": "Fetch Error Categories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [580, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages?user_id=eq.{{ $json.user_id }}&order=created_at.desc&limit=30&select=explanation,cefr_estimate,input_type",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-analyze-errors",
+      "name": "Analyze Error Patterns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 400],
+      "parameters": {
+        "jsCode": "// Analyze the last 30 corrections to find top error categories\nconst corrections = $input.all().map(item => item.json);\nconst userId = $('Validate Request').first().json.user_id;\nconst difficultyOverride = $('Validate Request').first().json.difficulty_override;\n\nif (corrections.length === 0) {\n  // No history — generate beginner exercises\n  return [{\n    json: {\n      user_id: userId,\n      topErrors: ['article gender (der/die/das)', 'verb conjugation (ich/du/er forms)', 'basic sentence word order'],\n      cefrLevel: difficultyOverride || 'A1',\n      hasHistory: false\n    }\n  }];\n}\n\n// Known German grammar error categories to scan for\nconst errorKeywords = {\n  'article gender': ['der', 'die', 'das', 'article', 'gender', 'nominative', 'accusative', 'dative', 'genitive', 'ein', 'eine'],\n  'verb conjugation': ['conjugat', 'verb', 'sein', 'haben', 'modal', 'irregular', 'present tense', 'past tense', 'ich/du/er'],\n  'word order': ['word order', 'verb-second', 'inversion', 'main clause', 'subordinate', 'V2'],\n  'adjective endings': ['adjective', 'adjektiv', 'ending', '-en', '-em', '-er', '-es'],\n  'separable verbs': ['separable', 'prefix', 'trennbar', 'anrufen', 'aufmachen'],\n  'prepositions': ['preposition', 'preposition + case', 'an', 'auf', 'bei', 'in', 'mit', 'nach', 'von', 'zu', 'durch'],\n  'umlauts / spelling': ['umlaut', 'ß', 'spelling', 'schreibung', 'capitalization'],\n  'modal verbs': ['modal', 'können', 'müssen', 'dürfen', 'sollen', 'wollen', 'mögen'],\n  'past tense (Perfekt)': ['perfekt', 'haben + participle', 'sein + participle', 'past participle', 'ge-'],\n  'subordinating conjunctions': ['weil', 'dass', 'obwohl', 'subordinat', 'conjunction', 'nebensatz']\n};\n\n// Count keyword matches in explanations\nconst errorCounts = {};\nfor (const [category, keywords] of Object.entries(errorKeywords)) {\n  errorCounts[category] = 0;\n  for (const correction of corrections) {\n    const explanation = (correction.explanation || '').toLowerCase();\n    if (keywords.some(kw => explanation.includes(kw.toLowerCase()))) {\n      errorCounts[category]++;\n    }\n  }\n}\n\n// Sort by frequency, take top 3\nconst sorted = Object.entries(errorCounts)\n  .sort((a, b) => b[1] - a[1])\n  .filter(([, count]) => count > 0)\n  .slice(0, 3)\n  .map(([category]) => category);\n\n// If fewer than 3 categories found, add defaults\nconst defaults = ['article gender', 'verb conjugation', 'word order'];\nwhile (sorted.length < 3) {\n  const fallback = defaults.find(d => !sorted.includes(d));\n  if (fallback) sorted.push(fallback);\n  else break;\n}\n\n// Determine CEFR level from recent corrections\nconst cefrLevels = corrections.map(c => c.cefr_estimate).filter(Boolean);\nconst cefrOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];\nlet cefrLevel = 'A2';\nif (cefrLevels.length > 0) {\n  // Use the median CEFR level\n  const sorted_cefr = cefrLevels\n    .filter(l => cefrOrder.includes(l))\n    .sort((a, b) => cefrOrder.indexOf(a) - cefrOrder.indexOf(b));\n  cefrLevel = sorted_cefr[Math.floor(sorted_cefr.length / 2)] || 'A2';\n}\n\nreturn [{\n  json: {\n    user_id: userId,\n    topErrors: sorted,\n    cefrLevel: difficultyOverride || cefrLevel,\n    hasHistory: true,\n    totalCorrectionsAnalyzed: corrections.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-gpt-exercise",
+      "name": "GPT Generate Exercises",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1060, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are Morodeutsch, a German tutor creating targeted practice exercises for a Moroccan student. Generate exercises that specifically address their weak areas. All exercises should be at the student's CEFR level. Return ONLY valid JSON, no markdown.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\n        \"Generate exactly 3 practice exercises for a German learner at CEFR level \" + $json.cefrLevel + \".\\n\" +\n        \"Their top 3 error categories are: \" + $json.topErrors.join(', ') + \".\\n\" +\n        \"Each exercise should target one of these categories.\\n\\n\" +\n        \"Respond with this exact JSON structure:\\n\" +\n        \"{\\n\" +\n        \"  \\\"exercises\\\": [\\n\" +\n        \"    {\\n\" +\n        \"      \\\"id\\\": 1,\\n\" +\n        \"      \\\"type\\\": \\\"fill-in-the-blank | translation | error-correction | sentence-construction\\\",\\n\" +\n        \"      \\\"target_error\\\": \\\"<which of their error categories this addresses>\\\",\\n\" +\n        \"      \\\"instruction\\\": \\\"<clear instruction in English for what to do>\\\",\\n\" +\n        \"      \\\"prompt\\\": \\\"<the exercise prompt / sentence with blank or error or translation task>\\\",\\n\" +\n        \"      \\\"hint\\\": \\\"<optional grammar hint without giving away the answer>\\\",\\n\" +\n        \"      \\\"expected_answer\\\": \\\"<the correct answer or completed sentence>\\\",\\n\" +\n        \"      \\\"explanation\\\": \\\"<why this is correct — the grammar rule>\\\",\\n\" +\n        \"      \\\"alternative_answers\\\": [\\\"<any acceptable alternative answers, if applicable>\\\"]\\n\" +\n        \"    }\\n\" +\n        \"  ],\\n\" +\n        \"  \\\"cefr_level\\\": \\\"\" + $json.cefrLevel + \"\\\",\\n\" +\n        \"  \\\"focus_areas\\\": \" + JSON.stringify($json.topErrors) + \"\\n\" +\n        \"}\"\n      ) }}\n    }\n  ],\n  \"temperature\": 0.6,\n  \"max_tokens\": 1500,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-parse-exercise",
+      "name": "Parse Exercise Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 400],
+      "parameters": {
+        "jsCode": "// Parse GPT exercise response and build final payload\nconst gptData = $('GPT Generate Exercises').first().json;\nconst analyzeData = $('Analyze Error Patterns').first().json;\n\nconst rawContent = gptData?.choices?.[0]?.message?.content || '{}';\n\nlet exerciseSet;\ntry {\n  const cleaned = rawContent.replace(/^```json\\s*/i, '').replace(/```\\s*$/, '').trim();\n  exerciseSet = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback if GPT fails to return valid JSON\n  exerciseSet = {\n    exercises: [\n      {\n        id: 1,\n        type: 'fill-in-the-blank',\n        target_error: analyzeData.topErrors[0] || 'article gender',\n        instruction: 'Fill in the correct article (der/die/das/ein/eine).',\n        prompt: '___ Buch liegt auf dem Tisch.',\n        hint: 'Buch is a neuter noun.',\n        expected_answer: 'Das Buch liegt auf dem Tisch.',\n        explanation: '\"Buch\" (book) is neuter, so the definite article is \"das\".',\n        alternative_answers: ['Ein Buch liegt auf dem Tisch.']\n      }\n    ],\n    cefr_level: analyzeData.cefrLevel,\n    focus_areas: analyzeData.topErrors\n  };\n}\n\nreturn [{\n  json: {\n    success: true,\n    user_id: analyzeData.user_id,\n    generated_at: new Date().toISOString(),\n    has_history: analyzeData.hasHistory,\n    corrections_analyzed: analyzeData.totalCorrectionsAnalyzed || 0,\n    exercise_set: exerciseSet\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-respond-exercise",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Generate Exercise": {
+      "main": [
+        [{ "node": "Validate Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [{ "node": "Fetch Error Categories", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Error Categories": {
+      "main": [
+        [{ "node": "Analyze Error Patterns", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analyze Error Patterns": {
+      "main": [
+        [{ "node": "GPT Generate Exercises", "type": "main", "index": 0 }]
+      ]
+    },
+    "GPT Generate Exercises": {
+      "main": [
+        [{ "node": "Parse Exercise Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Exercise Response": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": ["morodeutsch", "adaptive-exercise", "personalized"],
+  "versionId": "1.0.0"
+}

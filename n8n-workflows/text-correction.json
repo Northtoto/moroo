@@ -1,5 +1,6 @@
 {
   "name": "Text Correction",
+  "active": true,
   "nodes": [
     {
       "parameters": {

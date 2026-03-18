@@ -63,7 +63,12 @@ export interface Message {
 export interface CorrectionResult {
   original: string;
   corrected: string;
-  explanation: string;
+  error_categories: string[];
+  error_type?: string | null;
+  confidence?: number;
+  explanation_de?: string;
+  cefr_estimate: string;
+  new_vocabulary?: Array<{ word: string; translation: string; cefr: string }>;
   transcription?: string;
   inputType?: 'text' | 'audio' | 'image';
 }

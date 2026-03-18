@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "n8n": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\Administrateur\\Downloads\\morodeutsh\\mcp-server-n8n.mjs"
+      ],
+      "env": {
+        "N8N_API_URL": "http://localhost:5678/api/v1",
+        "N8N_API_KEY": ""
+      }
+    }
+  }
+}

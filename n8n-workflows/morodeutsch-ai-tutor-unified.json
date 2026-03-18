@@ -1,0 +1,635 @@
+{
+  "name": "Morodeutsch AI Tutor — Unified",
+  "active": true,
+  "nodes": [
+    {
+      "id": "node-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 400],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "morodeutsch-tutor",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      }
+    },
+    {
+      "id": "node-validate",
+      "name": "Validate + Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 400],
+      "parameters": {
+        "jsCode": "// --- Secret validation ---\nconst secret = $input.first().json.headers?.['x-webhook-secret'];\nconst expectedSecret = $env.WEBHOOK_SECRET;\n\nif (!secret || secret !== expectedSecret) {\n  throw new Error('Unauthorized: invalid or missing x-webhook-secret header');\n}\n\n// --- Parse body ---\nconst body = $input.first().json.body || $input.first().json;\nconst { type, payload, user_id, session_id } = body;\n\nif (!type || !['text', 'audio', 'ocr'].includes(type)) {\n  throw new Error('Invalid request: type must be \"text\", \"audio\", or \"ocr\"');\n}\nif (!user_id) {\n  throw new Error('Invalid request: user_id is required');\n}\nif (!session_id) {\n  throw new Error('Invalid request: session_id is required');\n}\nif (!payload || typeof payload !== 'object') {\n  throw new Error('Invalid request: payload object is required');\n}\n\n// --- In-memory rate limit (max 20 requests per user per minute) ---\n// Uses global static map persisted across executions within the same process\nif (!global.rateLimitMap) {\n  global.rateLimitMap = {};\n}\nconst now = Date.now();\nconst windowMs = 60 * 1000; // 1 minute\nconst maxRequests = 20;\n\nif (!global.rateLimitMap[user_id]) {\n  global.rateLimitMap[user_id] = [];\n}\n\n// Evict timestamps outside the current window\nglobal.rateLimitMap[user_id] = global.rateLimitMap[user_id].filter(\n  ts => now - ts < windowMs\n);\n\nif (global.rateLimitMap[user_id].length >= maxRequests) {\n  throw new Error(`Rate limit exceeded: user ${user_id} has sent ${maxRequests} requests in the last minute`);\n}\n\nglobal.rateLimitMap[user_id].push(now);\n\nreturn [{\n  json: {\n    type,\n    payload,\n    user_id,\n    session_id\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-fetch-history",
+      "name": "Fetch User History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [580, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages?user_id=eq.{{ $json.user_id }}&order=created_at.desc&limit=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "node-build-prompt",
+      "name": "Build System Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 400],
+      "parameters": {
+        "jsCode": "// Pull validated data from the Validate node (step 2)\nconst validated = $('Validate + Rate Limit').first().json;\nconst { type, payload, user_id, session_id } = validated;\n\n// Pull history from Supabase (step 3)\nconst historyItems = $input.first().json;\nconst history = Array.isArray(historyItems) ? historyItems : [];\n\n// Build history context string\nlet historyContext = '';\nif (history.length > 0) {\n  historyContext = '\\n\\nRecent session history (last 5 corrections for this student):\\n';\n  history.forEach((msg, i) => {\n    const original = msg.original_text || msg.original || '';\n    const corrected = msg.corrected_text || msg.corrected || '';\n    const created = msg.created_at ? new Date(msg.created_at).toLocaleDateString('de-DE') : '';\n    historyContext += `${i + 1}. [${created}] Original: \"${original}\" → Corrected: \"${corrected}\"\\n`;\n  });\n}\n\n// Detect recurring error patterns from history\nlet patternNote = '';\nif (history.length >= 2) {\n  patternNote = '\\nNote: Based on this student\\'s history, pay special attention to patterns of repeated errors (e.g., consistent case mistakes, recurring verb conjugation errors, or repeated preposition misuse). Highlight if this submission repeats a previously corrected error.';\n}\n\n// Construct personalized system prompt\nconst systemPrompt = `You are Morodeutsch, a warm and encouraging German language tutor specializing in teaching Moroccan students. You understand the linguistic challenges Arabic and Darija speakers face when learning German (e.g., definite article gender, verb-second word order, case declension).\n\nYour task: analyze the student's German submission, correct it, and provide a pedagogically sound explanation in simple English (with occasional Darija/French encouragement phrases where natural).\n\nAlways respond with a single valid JSON object in this exact format:\n{\n  \"original\": \"<the student's original text>\",\n  \"corrected\": \"<the fully corrected German text>\",\n  \"explanation\": \"<clear explanation of each correction made, referencing specific grammar rules>\",\n  \"cefr_estimate\": \"<estimated CEFR level: A1, A2, B1, B2, C1, or C2>\",\n  \"encouragement\": \"<a short, genuine motivational message in English with one phrase in German or Darija>\"\n}\n\nGuidelines:\n- Be specific about corrections (e.g., \"Article 'der' → 'die' because 'Sprache' is feminine\")\n- Estimate CEFR level based on vocabulary range, grammatical complexity, and error frequency\n- Keep encouragement authentic, not generic\n- If the text is already correct, say so and still provide cefr_estimate and encouragement\n- Do NOT wrap the JSON in markdown code fences${historyContext}${patternNote}`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    type,\n    payload,\n    user_id,\n    session_id\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-switch",
+      "name": "Route by Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1060, 400],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "ocr",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ocr"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-azure-gpt",
+      "name": "Azure GPT-4o",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Please analyze and correct this German text: \" + ($json.payload.text || $json.payload.transcribed_text || '')) }}\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1200,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 30000,
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-openrouter-fallback",
+      "name": "OpenRouter Fallback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1540, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://morodeutsch.com"
+            },
+            {
+              "name": "X-Title",
+              "value": "Morodeutsch AI Tutor"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"anthropic/claude-3.5-sonnet\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($('Build System Prompt').first().json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Please analyze and correct this German text: \" + ($('Build System Prompt').first().json.payload.text || $('Build System Prompt').first().json.payload.transcribed_text || '')) }}\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1200\n}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-azure-whisper",
+      "name": "Azure Whisper STT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/whisper/audio/transcriptions?api-version=2024-06-01",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "audio"
+            },
+            {
+              "name": "language",
+              "value": "de"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-groq-fallback",
+      "name": "Groq Whisper Fallback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1540, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "audio"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3"
+            },
+            {
+              "name": "language",
+              "value": "de"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-resolve-transcription",
+      "name": "Resolve Transcription",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400],
+      "parameters": {
+        "jsCode": "// Pick the successful transcription (Azure primary, Groq fallback)\nconst azureResult = $('Azure Whisper STT').first()?.json;\nconst groqResult = $('Groq Whisper Fallback').first()?.json;\n\nconst transcribedText =\n  (azureResult && !azureResult.error && azureResult.text) ||\n  (groqResult && !groqResult.error && groqResult.text) ||\n  '';\n\nif (!transcribedText) {\n  throw new Error('Audio transcription failed on both Azure Whisper and Groq. Please try again or submit text directly.');\n}\n\nconst buildPromptData = $('Build System Prompt').first().json;\n\nreturn [{\n  json: {\n    ...buildPromptData,\n    payload: {\n      ...buildPromptData.payload,\n      transcribed_text: transcribedText\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-azure-vision",
+      "name": "Azure Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_VISION_ENDPOINT }}/vision/v3.2/read/analyze?language=de",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Ocp-Apim-Subscription-Key",
+              "value": "={{ $env.AZURE_VISION_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": {{ JSON.stringify($json.payload.image_url || '') }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-resolve-ocr",
+      "name": "Resolve OCR Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 600],
+      "parameters": {
+        "jsCode": "// The Azure Vision Read API returns an Operation-Location header;\n// for simplicity here we use the base64 image path via the image_base64 field\n// which is sent directly to GPT-4o Vision for in-context OCR.\n\n// Pull from Build System Prompt context\nconst buildPromptData = $('Build System Prompt').first().json;\nconst imageBase64 = buildPromptData.payload.image_base64 || '';\n\nif (!imageBase64) {\n  throw new Error('OCR request missing image_base64 in payload');\n}\n\n// We will pass the base64 image directly to GPT-4o vision endpoint\nreturn [{\n  json: {\n    ...buildPromptData,\n    payload: {\n      ...buildPromptData.payload,\n      image_base64: imageBase64\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-azure-gpt-ocr",
+      "name": "Azure GPT-4o Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"This image contains a student's handwritten or printed German text. First extract all the text you can read (OCR), then correct it. Clean up any OCR artifacts from handwriting. Respond with the JSON format specified in your system prompt.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": {{ JSON.stringify(\"data:image/jpeg;base64,\" + $json.payload.image_base64) }},\n            \"detail\": \"high\"\n          }\n        }\n      ]\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1500,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-audio-to-gpt",
+      "name": "Azure GPT-4o Audio Correct",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2020, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AZURE_OPENAI_ENDPOINT }}/openai/deployments/gpt-4o/chat/completions?api-version=2024-02-15-preview",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.AZURE_OPENAI_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.systemPrompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Please analyze and correct this German text (transcribed from the student's spoken audio — some errors may be speech disfluencies vs grammatical errors, please distinguish): \" + $json.payload.transcribed_text) }}\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 1200,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-parse-response",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2260, 400],
+      "parameters": {
+        "jsCode": "// This node normalizes output from ALL three branches (text, audio, ocr)\n// into a single unified shape.\n\n// Detect which branch produced output by checking which upstream node has data\nlet rawContent = '';\nlet inputType = 'text';\nlet originalInput = '';\n\n// Try to pull from audio branch first\ntry {\n  const audioGptData = $('Azure GPT-4o Audio Correct').first()?.json;\n  if (audioGptData && audioGptData.choices) {\n    rawContent = audioGptData.choices[0]?.message?.content || '';\n    inputType = 'audio';\n    originalInput = $('Resolve Transcription').first()?.json?.payload?.transcribed_text || '';\n  }\n} catch (e) {}\n\n// Try OCR branch\nif (!rawContent) {\n  try {\n    const ocrGptData = $('Azure GPT-4o Vision OCR').first()?.json;\n    if (ocrGptData && ocrGptData.choices) {\n      rawContent = ocrGptData.choices[0]?.message?.content || '';\n      inputType = 'ocr';\n      originalInput = $('Build System Prompt').first()?.json?.payload?.image_base64 ? '[image submitted]' : '';\n    }\n  } catch (e) {}\n}\n\n// Try text branch — Azure GPT primary\nif (!rawContent) {\n  try {\n    const azureData = $('Azure GPT-4o').first()?.json;\n    if (azureData && azureData.choices) {\n      rawContent = azureData.choices[0]?.message?.content || '';\n      inputType = 'text';\n      originalInput = $('Build System Prompt').first()?.json?.payload?.text || '';\n    }\n  } catch (e) {}\n}\n\n// Try text branch — OpenRouter fallback\nif (!rawContent) {\n  try {\n    const orData = $('OpenRouter Fallback').first()?.json;\n    if (orData && orData.choices) {\n      rawContent = orData.choices[0]?.message?.content || '';\n      inputType = 'text';\n      originalInput = $('Build System Prompt').first()?.json?.payload?.text || '';\n    }\n  } catch (e) {}\n}\n\nif (!rawContent) {\n  throw new Error('All AI endpoints failed to produce a response. Please retry.');\n}\n\n// Parse JSON from AI response\nlet parsed;\ntry {\n  // Strip markdown code fences if present\n  const cleaned = rawContent.replace(/^```json\\s*/i, '').replace(/```\\s*$/, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback: wrap raw content\n  parsed = {\n    original: originalInput,\n    corrected: rawContent,\n    explanation: 'The AI response could not be parsed as structured JSON. Raw response returned.',\n    cefr_estimate: 'B1',\n    encouragement: 'Keep going! Mach weiter so!'\n  };\n}\n\n// Ensure all required fields are present\nconst normalized = {\n  original: parsed.original || originalInput,\n  corrected: parsed.corrected || '',\n  explanation: parsed.explanation || '',\n  cefr_estimate: parsed.cefr_estimate || 'B1',\n  encouragement: parsed.encouragement || 'Sehr gut! Keep practicing!',\n  input_type: inputType,\n  session_id: $('Build System Prompt').first()?.json?.session_id || '',\n  user_id: $('Build System Prompt').first()?.json?.user_id || '',\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: normalized }];"
+      }
+    },
+    {
+      "id": "node-store-supabase",
+      "name": "Store to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2500, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"user_id\": {{ JSON.stringify($json.user_id) }},\n  \"session_id\": {{ JSON.stringify($json.session_id) }},\n  \"input_type\": {{ JSON.stringify($json.input_type) }},\n  \"original_text\": {{ JSON.stringify($json.original) }},\n  \"corrected_text\": {{ JSON.stringify($json.corrected) }},\n  \"explanation\": {{ JSON.stringify($json.explanation) }},\n  \"cefr_estimate\": {{ JSON.stringify($json.cefr_estimate) }},\n  \"encouragement\": {{ JSON.stringify($json.encouragement) }},\n  \"created_at\": {{ JSON.stringify($json.timestamp) }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-award-xp",
+      "name": "Award XP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2740, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/award_xp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_user_id\": {{ JSON.stringify($json.user_id) }},\n  \"p_xp\": {{ $json.input_type === 'audio' ? 20 : $json.input_type === 'ocr' ? 15 : 10 }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "node-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2980, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $('Parse Response').first().json }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Validate + Rate Limit", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate + Rate Limit": {
+      "main": [
+        [{ "node": "Fetch User History", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch User History": {
+      "main": [
+        [{ "node": "Build System Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build System Prompt": {
+      "main": [
+        [{ "node": "Route by Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Type": {
+      "main": [
+        [{ "node": "Azure GPT-4o", "type": "main", "index": 0 }],
+        [{ "node": "Azure Whisper STT", "type": "main", "index": 0 }],
+        [{ "node": "Azure Vision OCR", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure GPT-4o": {
+      "main": [
+        [{ "node": "OpenRouter Fallback", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenRouter Fallback": {
+      "main": [
+        [{ "node": "Parse Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure Whisper STT": {
+      "main": [
+        [{ "node": "Groq Whisper Fallback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Groq Whisper Fallback": {
+      "main": [
+        [{ "node": "Resolve Transcription", "type": "main", "index": 0 }]
+      ]
+    },
+    "Resolve Transcription": {
+      "main": [
+        [{ "node": "Azure GPT-4o Audio Correct", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure GPT-4o Audio Correct": {
+      "main": [
+        [{ "node": "Parse Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure Vision OCR": {
+      "main": [
+        [{ "node": "Resolve OCR Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Resolve OCR Text": {
+      "main": [
+        [{ "node": "Azure GPT-4o Vision OCR", "type": "main", "index": 0 }]
+      ]
+    },
+    "Azure GPT-4o Vision OCR": {
+      "main": [
+        [{ "node": "Parse Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [{ "node": "Store to Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store to Supabase": {
+      "main": [
+        [{ "node": "Award XP", "type": "main", "index": 0 }]
+      ]
+    },
+    "Award XP": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["morodeutsch", "ai-tutor", "unified"],
+  "versionId": "1.0.0"
+}

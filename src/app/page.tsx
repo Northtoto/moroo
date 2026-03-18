@@ -1,133 +1,298 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+
+const WORDS = ['Lernen.', 'Korrigieren.', 'Wachsen.', 'Verstehen.', 'Sprechen.'];
+
+const FEATURES = [
+  {
+    icon: '🧠',
+    title: 'KI-Korrektur',
+    desc: 'Azure GPT-4o analysiert deinen Text, deine Stimme oder dein Foto in Echtzeit.',
+  },
+  {
+    icon: '🔥',
+    title: 'Gamification',
+    desc: 'XP, Serien, Abzeichen und Liga-Rangliste — Lernen fühlt sich wie spielen an.',
+  },
+  {
+    icon: '📊',
+    title: 'CEFR-Tracking',
+    desc: 'Vom Anfänger zum Experten. Dein Fortschritt von A1 bis C2 immer im Blick.',
+  },
+];
+
+const CEFR_LEVELS = [
+  { level: 'A1', label: 'Anfänger', cls: 'cefr-a1' },
+  { level: 'A2', label: 'Grundlagen', cls: 'cefr-a2' },
+  { level: 'B1', label: 'Mittelstufe', cls: 'cefr-b1' },
+  { level: 'B2', label: 'Oberstufe', cls: 'cefr-b2' },
+  { level: 'C1', label: 'Fortgeschr.', cls: 'cefr-c1' },
+  { level: 'C2', label: 'Meister', cls: 'cefr-c2' },
+];
+
+function AnimatedWord() {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % WORDS.length);
+        setVisible(true);
+      }, 350);
+    }, 2400);
+    return () => clearInterval(cycle);
+  }, []);
+
+  return (
+    <span
+      className="inline-block transition-all duration-300"
+      style={{
+        color: 'var(--amber)',
+        fontFamily: 'var(--font-display)',
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(-10px)',
+      }}
+    >
+      {WORDS[idx]}
+    </span>
+  );
+}
+
+function ParticleCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const c = canvas.getContext('2d');
+    if (!c) return;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const pts: { x: number; y: number; vx: number; vy: number; r: number; a: number }[] = [];
+    for (let i = 0; i < 80; i++) {
+      pts.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        a: Math.random(),
+      });
+    }
+
+    let raf: number;
+    function draw() {
+      raf = requestAnimationFrame(draw);
+      c!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      pts.forEach((p) => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x = canvas!.width;
+        if (p.x > canvas!.width) p.x = 0;
+        if (p.y < 0) p.y = canvas!.height;
+        if (p.y > canvas!.height) p.y = 0;
+        c!.beginPath();
+        c!.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        c!.fillStyle = `rgba(245,158,11,${p.a * 0.35})`;
+        c!.fill();
+      });
+
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x;
+          const dy = pts[i].y - pts[j].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 100) {
+            c!.beginPath();
+            c!.moveTo(pts[i].x, pts[i].y);
+            c!.lineTo(pts[j].x, pts[j].y);
+            c!.strokeStyle = `rgba(245,158,11,${0.07 * (1 - d / 100)})`;
+            c!.lineWidth = 0.5;
+            c!.stroke();
+          }
+        }
+      }
+    }
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, []);
+
+  return (
+    <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }} />
+  );
+}
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* Nav */}
-      <nav className="border-b border-white/5">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
-          <span className="text-xl font-bold">Deutsche Meister</span>
-          <div className="flex gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white transition-colors"
-            >
-              Sign in
+    <div style={{ background: 'var(--bg-base)', minHeight: '100vh', color: 'var(--text-primary)' }}>
+
+      {/* ══ HERO ══ */}
+      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+        <ParticleCanvas />
+
+        {/* Ambient orbs */}
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+          <div className="absolute" style={{ top: '15%', left: '20%', width: '40vw', height: '40vw', borderRadius: '50%', background: 'radial-gradient(circle, rgba(245,158,11,0.07) 0%, transparent 65%)' }} />
+          <div className="absolute" style={{ bottom: '10%', right: '15%', width: '30vw', height: '30vw', borderRadius: '50%', background: 'radial-gradient(circle, rgba(186,230,253,0.04) 0%, transparent 65%)' }} />
+        </div>
+
+        {/* Nav */}
+        <nav className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-5" style={{ zIndex: 10 }}>
+          <span className="text-xl font-bold" style={{ fontFamily: 'var(--font-display)', color: 'var(--amber)' }}>
+            Moro<span style={{ color: 'var(--text-primary)' }}>deutsch</span>
+          </span>
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm font-medium transition-opacity hover:opacity-70" style={{ color: 'var(--text-muted)' }}>
+              Einloggen
             </Link>
             <Link
               href="/signup"
-              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+              style={{ background: 'var(--amber)', color: '#0a0c12', fontFamily: 'var(--font-display)' }}
             >
-              Get Started Free
+              Kostenlos starten
             </Link>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 text-center">
-        <div className="inline-block px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-medium mb-6">
-          AI-Powered German Tutoring
-        </div>
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-tight">
-          Master German with
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400"> Intelligent AI</span>
-        </h1>
-        <p className="text-lg text-slate-400 mt-6 max-w-2xl mx-auto leading-relaxed">
-          Get instant corrections on your writing, speaking, and homework.
-          Our AI tutor understands context, explains mistakes, and helps you improve faster.
-        </p>
-        <div className="flex gap-4 justify-center mt-8">
-          <Link
-            href="/signup"
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors text-base"
+        {/* Hero content */}
+        <div className="relative text-center px-4 max-w-4xl mx-auto" style={{ zIndex: 2 }}>
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-8 animate-fade-up"
+            style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', color: 'var(--amber)', fontFamily: 'var(--font-display)', animationDelay: '0ms' }}
           >
-            Start Learning Free
-          </Link>
-          <Link
-            href="/login"
-            className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-semibold transition-colors text-base"
+            🇲🇦 × 🇩🇪 &nbsp;·&nbsp; KI-gestützter Deutsch-Tutor
+          </div>
+
+          <h1
+            className="text-5xl md:text-7xl font-black leading-tight mb-4 animate-fade-up text-glow-amber"
+            style={{ fontFamily: 'var(--font-display)', animationDelay: '80ms' }}
           >
-            Sign In
-          </Link>
-        </div>
-      </section>
+            Morodeutsch
+          </h1>
 
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </div>
-            <h3 className="text-white font-semibold text-lg">Text Correction</h3>
-            <p className="text-slate-400 mt-2 text-sm leading-relaxed">
-              Write German text and get instant grammar, spelling, and word order corrections with clear explanations.
-            </p>
+          <p className="text-xl md:text-2xl mb-3 animate-fade-up" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-display)', animationDelay: '160ms' }}>
+            Your AI-Powered German Tutor.
+          </p>
+
+          <div className="text-lg md:text-xl mb-10 animate-fade-up" style={{ animationDelay: '240ms', minHeight: '2rem' }}>
+            <AnimatedWord />
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            </div>
-            <h3 className="text-white font-semibold text-lg">Audio Analysis</h3>
-            <p className="text-slate-400 mt-2 text-sm leading-relaxed">
-              Record yourself speaking or upload audio files. AI transcribes and corrects your German pronunciation.
-            </p>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-white font-semibold text-lg">Homework OCR</h3>
-            <p className="text-slate-400 mt-2 text-sm leading-relaxed">
-              Snap a photo of your handwritten homework. OCR extracts the text and AI corrects your German.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Levels */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h2 className="text-2xl font-bold text-center mb-8">All Levels, A1 to C2</h2>
-        <div className="flex flex-wrap justify-center gap-3">
-          {['A1 Beginner', 'A2 Elementary', 'B1 Intermediate', 'B2 Upper-Intermediate', 'C1 Advanced', 'C2 Mastery'].map((level) => (
-            <span
-              key={level}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-slate-300"
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up" style={{ animationDelay: '320ms' }}>
+            <Link
+              href="/signup"
+              className="px-8 py-3.5 rounded-2xl text-base font-bold transition-all animate-pulse-glow"
+              style={{ background: 'var(--amber)', color: '#0a0c12', fontFamily: 'var(--font-display)', boxShadow: '0 0 30px rgba(245,158,11,0.3)' }}
             >
-              {level}
-            </span>
+              Starte kostenlos →
+            </Link>
+            <Link
+              href="/login"
+              className="px-8 py-3.5 rounded-2xl text-base font-medium transition-all hover:bg-white/5"
+              style={{ border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}
+            >
+              Einloggen
+            </Link>
+          </div>
+
+          <p className="mt-8 text-sm animate-fade-up" style={{ color: 'var(--text-muted)', animationDelay: '400ms' }}>
+            <span style={{ color: 'var(--amber)' }}>127 Studenten</span> · 98% Verbesserungsrate
+          </p>
+        </div>
+
+        {/* Scroll chevron */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-fade-up" style={{ zIndex: 2, animationDelay: '600ms', color: 'var(--text-muted)' }}>
+          <span className="text-xs">Mehr entdecken</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 animate-bounce">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </section>
+
+      {/* ══ FEATURES ══ */}
+      <section className="px-4 py-24 max-w-5xl mx-auto">
+        <p className="text-center text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+          Warum Morodeutsch?
+        </p>
+        <h2 className="text-3xl md:text-4xl font-bold text-center mb-14" style={{ fontFamily: 'var(--font-display)' }}>
+          Alles was du brauchst
+        </h2>
+        <div className="grid md:grid-cols-3 gap-5">
+          {FEATURES.map((f, i) => (
+            <div
+              key={i}
+              className="rounded-2xl p-6 animate-fade-up transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--glass-border)', animationDelay: `${i * 80}ms` }}
+            >
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl mb-4" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                {f.icon}
+              </div>
+              <h3 className="text-base font-bold mb-2" style={{ fontFamily: 'var(--font-display)' }}>{f.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>{f.desc}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-        <h2 className="text-3xl font-bold">Start Improving Your German Today</h2>
-        <p className="text-slate-400 mt-3 max-w-lg mx-auto">
-          Free to start. No credit card required.
+      {/* ══ CEFR PATH ══ */}
+      <section className="px-4 py-20" style={{ background: 'var(--bg-surface)' }}>
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-display)' }}>
+            Dein Lernpfad
+          </p>
+          <h2 className="text-3xl font-bold mb-12" style={{ fontFamily: 'var(--font-display)' }}>Von A1 bis C2</h2>
+          <div className="flex items-center justify-center gap-1 md:gap-3 flex-wrap">
+            {CEFR_LEVELS.map(({ level, label, cls }, i) => (
+              <div key={level} className="flex items-center gap-1 md:gap-3">
+                <div className="flex flex-col items-center animate-fade-up" style={{ animationDelay: `${i * 80}ms` }}>
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-sm ${cls}`}
+                    style={{ fontFamily: 'var(--font-display)', color: '#fff' }}
+                  >
+                    {level}
+                  </div>
+                  <span className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>{label}</span>
+                </div>
+                {i < CEFR_LEVELS.length - 1 && (
+                  <div className="hidden md:block w-8 h-px" style={{ background: 'linear-gradient(90deg, rgba(245,158,11,0.4), rgba(245,158,11,0.1))' }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ CTA ══ */}
+      <section className="px-4 py-24 text-center">
+        <h2 className="text-4xl md:text-5xl font-black mb-4" style={{ fontFamily: 'var(--font-display)' }}>
+          Bereit anzufangen?
+        </h2>
+        <p className="text-base mb-8" style={{ color: 'var(--text-muted)' }}>
+          Kostenlos starten. Keine Kreditkarte erforderlich.
         </p>
         <Link
           href="/signup"
-          className="inline-block mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-semibold transition-colors"
+          className="inline-block px-10 py-4 rounded-2xl text-lg font-bold transition-all animate-pulse-glow"
+          style={{ background: 'var(--amber)', color: '#0a0c12', fontFamily: 'var(--font-display)', boxShadow: '0 0 40px rgba(245,158,11,0.25)' }}
         >
-          Create Free Account
+          Jetzt kostenlos registrieren →
         </Link>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
-          Deutsche Meister &mdash; AI-Powered German Tutoring
-        </div>
+      {/* ══ FOOTER ══ */}
+      <footer className="text-center py-8 text-xs" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--glass-border)' }}>
+        © 2025 Morodeutsch · AI German Tutor
       </footer>
     </div>
   );
