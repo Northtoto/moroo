@@ -22,6 +22,7 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
   const [progress, setProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
 
   const processImage = useCallback(
@@ -107,6 +108,49 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
 
   return (
     <div className="space-y-4">
+      {/* Camera and Gallery buttons - Mobile friendly */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => !disabled && !processing && cameraInputRef.current?.click()}
+          disabled={disabled || processing}
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 h-12 sm:h-auto rounded-xl text-sm font-medium transition-colors"
+          style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            color: 'var(--ice)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            opacity: disabled || processing ? 0.5 : 1,
+            cursor: disabled || processing ? 'not-allowed' : 'pointer',
+          }}
+          aria-label="Kamera öffnen"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          📷 Kamera
+        </button>
+        <button
+          type="button"
+          onClick={() => !disabled && !processing && fileInputRef.current?.click()}
+          disabled={disabled || processing}
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 h-12 sm:h-auto rounded-xl text-sm font-medium transition-colors"
+          style={{
+            background: 'rgba(245, 158, 11, 0.15)',
+            color: 'var(--amber)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            opacity: disabled || processing ? 0.5 : 1,
+            cursor: disabled || processing ? 'not-allowed' : 'pointer',
+          }}
+          aria-label="Galerie öffnen"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          🖼️ Galerie
+        </button>
+      </div>
+
       {/* Drop zone */}
       <div
         onDrop={handleDrop}
@@ -177,6 +221,17 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
             </div>
           </div>
         )}
+        {/* Camera input - native camera on mobile */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileChange}
+          className="hidden"
+          disabled={disabled || processing}
+        />
+        {/* Gallery input - file browser */}
         <input
           ref={fileInputRef}
           type="file"

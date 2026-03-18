@@ -8,7 +8,7 @@ interface AudioRecorderProps {
   disabled?: boolean;
 }
 
-const CANVAS_SIZE = 180;
+const CANVAS_SIZE = 180; // Base size; responsive via CSS scaling
 
 function drawWaveform(
   canvas: HTMLCanvasElement,
@@ -233,16 +233,19 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
     `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      {/* Waveform canvas */}
-      <div className="relative">
+    <div className="flex flex-col items-center gap-4 sm:gap-6 w-full">
+      {/* Waveform canvas - responsive size */}
+      <div className="relative flex justify-center w-full">
         <canvas
           ref={canvasRef}
           width={CANVAS_SIZE}
           height={CANVAS_SIZE}
           id="waveform-canvas"
-          className="rounded-full"
+          className="rounded-full max-w-xs sm:max-w-none"
           style={{
+            width: 'auto',
+            height: 'auto',
+            maxWidth: '140px',
             background: 'radial-gradient(circle, rgba(245,158,11,0.05) 0%, transparent 70%)',
             border: isRecording ? '1px solid rgba(245,158,11,0.4)' : '1px solid var(--glass-border)',
             boxShadow: isRecording ? '0 0 24px rgba(245,158,11,0.3)' : 'none',
@@ -288,12 +291,12 @@ export default function AudioRecorder({ onAudioReady, disabled }: AudioRecorderP
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap w-full sm:w-auto justify-center">
         <button
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
           disabled={disabled}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+          className="flex items-center gap-2 px-4 sm:px-5 py-3 sm:py-2.5 h-12 sm:h-auto rounded-xl font-semibold text-sm transition-all flex-1 sm:flex-none justify-center sm:justify-start min-w-[120px] sm:min-w-0"
           style={{
             background: isRecording ? 'rgba(239,68,68,0.15)' : 'var(--amber-glow)',
             color: isRecording ? 'var(--danger)' : 'var(--amber)',

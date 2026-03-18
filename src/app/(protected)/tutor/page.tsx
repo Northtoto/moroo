@@ -6,6 +6,7 @@ import CorrectionDisplay from '@/components/correction/CorrectionDisplay';
 import AudioRecorder from '@/components/tutor/AudioRecorder';
 import ImageUploader from '@/components/tutor/ImageUploader';
 import DictionarySearch from '@/components/tutor/DictionarySearch';
+import MobileStatsDrawer from '@/components/tutor/MobileStatsDrawer';
 import type { CorrectionResult } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -183,24 +184,24 @@ export default function TutorPage() {
   const maxErrCount = topErrors[0]?.count ?? 1;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden flex-col lg:flex-row">
       {/* ── CENTER ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Page header */}
-        <div className="px-8 pt-8 pb-0 shrink-0">
+        <div className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 md:pt-8 pb-0 shrink-0">
           <h1
-            className="text-2xl font-bold mb-1 animate-fade-up"
+            className="text-xl sm:text-2xl font-bold mb-1 animate-fade-up"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}
           >
             KI-Tutor
           </h1>
-          <p className="text-sm animate-fade-up" style={{ color: 'var(--text-muted)', animationDelay: '50ms' }}>
+          <p className="text-xs sm:text-sm animate-fade-up" style={{ color: 'var(--text-muted)', animationDelay: '50ms' }}>
             Reiche dein Deutsch ein — erhalte sofortige Korrektur und Erklärung.
           </p>
         </div>
 
         {/* Mode tabs */}
-        <div className="px-8 pt-6 shrink-0">
+        <div className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 shrink-0">
           <div
             className="relative inline-flex rounded-xl p-1"
             style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)' }}
@@ -242,7 +243,7 @@ export default function TutorPage() {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
           {/* Input card */}
           <div
             className="rounded-2xl p-6 animate-fade-up"
@@ -256,9 +257,9 @@ export default function TutorPage() {
                     value={textInput}
                     onChange={(e) => { setTextInput(e.target.value); setCharCount(e.target.value.length); }}
                     placeholder="Schreib deinen deutschen Text hier... z.B. 'Ich bin gestern in Schule gegangen.'"
-                    rows={6}
+                    rows={typeof window !== 'undefined' && window.innerWidth < 768 ? 4 : 6}
                     maxLength={2000}
-                    className="w-full px-4 py-3.5 rounded-xl text-sm resize-none transition-all"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-xl text-sm sm:text-base resize-none transition-all"
                     style={{
                       background: 'var(--glass-bg)',
                       border: '1px solid var(--glass-border)',
@@ -275,11 +276,11 @@ export default function TutorPage() {
                     {charCount}/2000
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
                   <button
                     type="submit"
                     disabled={loading || !textInput.trim()}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all animate-pulse-glow"
+                    className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-2.5 h-12 sm:h-auto rounded-xl text-sm sm:text-sm font-semibold transition-all animate-pulse-glow flex-1 sm:flex-none justify-center sm:justify-start"
                     style={{
                       background: loading || !textInput.trim() ? 'rgba(245,158,11,0.3)' : 'var(--amber)',
                       color: '#0a0c12',
@@ -330,7 +331,7 @@ export default function TutorPage() {
                   <button
                     onClick={handleAudioSubmit}
                     disabled={loading}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all animate-pulse-glow"
+                    className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-2.5 h-12 sm:h-auto rounded-xl text-sm font-semibold transition-all animate-pulse-glow w-full sm:w-auto justify-center"
                     style={{
                       background: loading ? 'rgba(245,158,11,0.3)' : 'var(--amber)',
                       color: '#0a0c12',
@@ -586,6 +587,13 @@ export default function TutorPage() {
           <div className="ml-auto w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--success)' }} />
         </div>
       </aside>
+
+      {/* Mobile stats drawer - visible on mobile, hidden on lg screens */}
+      <MobileStatsDrawer
+        correctionsToday={stats.today}
+        accuracy={stats.accuracy}
+        errorPatterns={errorPatterns}
+      />
     </div>
   );
 }
