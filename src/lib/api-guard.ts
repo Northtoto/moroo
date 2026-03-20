@@ -168,7 +168,9 @@ export function withApiGuard(handler: GuardedHandler, options: ApiGuardOptions =
     // ── 4. Request Body Validation ────────────────────────────────────────
     let validatedBody: unknown;
 
-    if (bodySchema) {
+    // Skip body schema for multipart/form-data — those are validated inside the handler
+    const isMultipart = req.headers.get('content-type')?.includes('multipart/form-data') ?? false;
+    if (bodySchema && !isMultipart) {
       try {
         const rawBody = await req.json();
         const result = bodySchema.safeParse(rawBody);

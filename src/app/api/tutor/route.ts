@@ -5,6 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withApiGuard } from '@/lib/api-guard';
+import { z } from 'zod';
+
+// Zod schema for JSON (text/OCR) requests — multipart audio bypasses this in withApiGuard
+const TutorTextBodySchema = z.object({
+  workflow: z.enum(['text-correction', 'ocr-correction']),
+  text: z.string().min(1).max(2000).optional(),
+  ocr_text: z.string().min(1).max(2000).optional(),
+}).passthrough();
 import { buildN8nContext, updateStudentModel, saveCorrectionHistory, type CorrectionResult } from '@/lib/student-model';
 import { updateAccuracy } from '@/lib/adaptive-engine';
 import { logger, createRequestLogger, generateRequestId } from '@/lib/logger';
@@ -21,7 +29,7 @@ type Workflow = typeof ALLOWED_WORKFLOWS[number];
 
 // Helper: Detailed logging with context
 function logAudio(stage: string, data: Record<string, any>) {
-  console.log(`[tutor:audio:${stage}]`, JSON.stringify(data, null, 2));
+  logger.info(`tutor.audio.${stage}`, data);
 }
 
 // ─── Error Classification & Handling ────────────────────────────────────
@@ -145,7 +153,7 @@ async function transcribeAudio(audioBlob: Blob, filename: string): Promise<strin
     });
 
     if (!res.ok) {
-      console.error('[tutor:audio] Whisper API error', {
+      logger.error('tutor.audio.whisper_http_error', undefined, {
         status: res.status,
         statusText: res.statusText,
         bodyPreview: responseText.substring(0, 200),
@@ -157,8 +165,7 @@ async function transcribeAudio(audioBlob: Blob, filename: string): Promise<strin
     try {
       data = JSON.parse(responseText) as { text?: string };
     } catch (parseErr) {
-      console.error('[tutor:audio] Failed to parse Whisper response', {
-        error: String(parseErr),
+      logger.error('tutor.audio.whisper_parse_failed', parseErr, {
         responseLength: responseText.length,
         isValidJSON: responseText.startsWith('{'),
       });
@@ -167,17 +174,17 @@ async function transcribeAudio(audioBlob: Blob, filename: string): Promise<strin
 
     // Validate transcription result
     if (!data.text) {
-      console.warn('[tutor:audio] Whisper returned no text (empty audio or no speech detected)', { data });
+      logger.warn('tutor.audio.empty_transcription', { dataKeys: Object.keys(data) });
       throw new Error('EMPTY_TRANSCRIPTION');
     }
 
     const text = data.text.trim();
     if (text.length === 0) {
-      console.warn('[tutor:audio] Transcribed text is empty after trimming');
+      logger.warn('tutor.audio.empty_after_trim');
       throw new Error('EMPTY_TRANSCRIPTION');
     }
 
-    console.log('[tutor:audio] Transcription successful', {
+    logger.info('tutor.audio.transcription_success', {
       textLength: text.length,
       words: text.split(/\s+/).length,
     });
@@ -196,7 +203,8 @@ async function transcribeAudio(audioBlob: Blob, filename: string): Promise<strin
 async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<string> {
   const url = `${AZURE_ENDPOINT}/openai/deployments/${GPT_DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`;
   
-  console.log(`[tutor:gpt] Calling ${GPT_DEPLOYMENT}`, {
+  logger.info('tutor.gpt.calling', {
+    deployment: GPT_DEPLOYMENT,
     userMessageLength: userMessage.length,
     timeout: '20s',
   });
@@ -220,7 +228,8 @@ async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<
 
     if (!res.ok) {
       const errorBody = await res.text().catch(() => 'unknown');
-      console.error(`[tutor:gpt] HTTP error ${res.status}`, {
+      logger.error('tutor.gpt.http_error', undefined, {
+        status: res.status,
         statusText: res.statusText,
         body: errorBody.substring(0, 200),
       });
@@ -231,19 +240,19 @@ async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<
     try {
       data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
     } catch (parseErr) {
-      console.error('[tutor:gpt] Failed to parse response JSON', { error: String(parseErr) });
+      logger.error('tutor.gpt.parse_failed', parseErr, { error: String(parseErr) });
       throw new Error('INVALID_JSON_RESPONSE');
     }
 
     // Validate response structure
     if (!data.choices || !Array.isArray(data.choices)) {
-      console.error('[tutor:gpt] Invalid response structure: no choices array', { data });
+      logger.error('tutor.gpt.invalid_structure', undefined, { dataKeys: Object.keys(data) });
       throw new Error('INVALID_RESPONSE_STRUCTURE');
     }
 
     const content = data.choices[0]?.message?.content;
     if (!content || typeof content !== 'string') {
-      console.error('[tutor:gpt] Empty or invalid content in response', {
+      logger.error('tutor.gpt.empty_content', undefined, {
         hasChoices: !!data.choices,
         choiceCount: data.choices.length,
         firstChoiceHasMessage: !!data.choices[0]?.message,
@@ -251,7 +260,7 @@ async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<
       throw new Error('EMPTY_RESPONSE_CONTENT');
     }
 
-    console.log('[tutor:gpt] Response received successfully', {
+    logger.info('tutor.gpt.response_received', {
       contentLength: content.length,
       hasJSON: content.includes('{'),
     });
@@ -260,7 +269,7 @@ async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<
   } catch (err) {
     // Don't swallow the error — let the main handler classify it
     if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[tutor:gpt] Request timeout (20s exceeded)');
+      logger.error('tutor.gpt.timeout', undefined, { timeoutMs: 20000 });
       throw new Error('TIMEOUT');
     }
     throw err;
@@ -417,7 +426,7 @@ function parseCorrectionResult(text: string, fallbackOriginal: string, isAudio =
       explanationDe += `\n\n💡 **Aussprache-Tipp:** Höre dir die richtige Aussprache an und vergleiche mit deiner Aufnahme.`;
     }
 
-    console.log('[tutor:parse] Parsed correction response:', {
+    logger.info('tutor.parse.success', {
       hasErrors: errorType !== null,
       errorCategory,
       confidence,
@@ -436,7 +445,7 @@ function parseCorrectionResult(text: string, fallbackOriginal: string, isAudio =
       new_vocabulary: (parsed.new_vocabulary as CorrectionResult['new_vocabulary']) || [],
     };
   } catch (err) {
-    console.error('[tutor:parse] Failed to parse correction response:', err);
+    logger.error('tutor.parse.failed', err);
     throw new Error('GPT_FAILED');
   }
 }
@@ -555,7 +564,7 @@ export const POST = withApiGuard(
 
       if (contentType.includes('multipart/form-data')) {
         // AUDIO CORRECTION
-        console.log('[tutor] Parsing multipart formdata for audio workflow');
+        rlog.info('tutor.audio.parse_formdata');
         const formData = await req.formData();
         workflow = formData.get('workflow') as string;
         sessionId = (formData.get('session_id') as string | null) ?? undefined;
@@ -566,30 +575,30 @@ export const POST = withApiGuard(
 
         const audioFile = formData.get('audio') as File | null;
         if (!audioFile) {
-          console.error('[tutor] No audio file in formdata');
+          rlog.error('tutor.audio.missing_file');
           return NextResponse.json({ error: 'Bitte laden Sie eine Audio-Datei hoch.' }, { status: 400 });
         }
 
         // ── Comprehensive audio validation ─────────────────────────────────
         const audioValidation = validateAudioInput(audioFile);
         if (!audioValidation.valid) {
-          console.log('[tutor] Audio validation failed:', audioValidation.error);
+          rlog.warn('tutor.audio.validation_failed', { error: audioValidation.error });
           return NextResponse.json({ error: audioValidation.error }, { status: 400 });
         }
 
-        console.log('[tutor] Audio file received', { name: audioFile.name, size: audioFile.size, type: audioFile.type });
+        rlog.info('tutor.audio.file_received', { name: audioFile.name, size: audioFile.size, type: audioFile.type });
 
         const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type || 'audio/webm' });
         
-        console.log('[tutor] Starting audio pipeline...');
+        rlog.info('tutor.audio.pipeline_start');
         const pipelineStart = performance.now();
         
         const whisperStart = performance.now();
         const transcribed = await transcribeAudio(audioBlob, audioFile.name || 'audio.webm');
         const whisperDuration = performance.now() - whisperStart;
-        console.log('[tutor:perf] Whisper transcription complete', { 
+        rlog.info('tutor.perf.whisper_complete', {
           duration_ms: Math.round(whisperDuration),
-          transcribed_length: transcribed.length 
+          transcribed_length: transcribed.length,
         });
 
         const gptStart = performance.now();
@@ -604,7 +613,7 @@ export const POST = withApiGuard(
         result = parseCorrectionResult(gptResponse, transcribed, true);
         
         const totalDuration = performance.now() - pipelineStart;
-        console.log('[tutor:perf] Audio correction pipeline complete', {
+        rlog.info('tutor.perf.audio_complete', {
           total_ms: Math.round(totalDuration),
           whisper_ms: Math.round(whisperDuration),
           gpt_ms: Math.round(gptDuration),
@@ -615,7 +624,7 @@ export const POST = withApiGuard(
       } else {
         // TEXT OR OCR CORRECTION
         const pipelineStart = performance.now();
-        console.log('[tutor] Parsing JSON request for text workflow');
+        rlog.info('tutor.text.parse_body');
         const body = await req.json() as Record<string, unknown>;
         workflow = body.workflow as string;
 
@@ -630,7 +639,7 @@ export const POST = withApiGuard(
         // Validate text input
         const validation = validateTextInput(inputText || '');
         if (!validation.valid) {
-          console.log('[tutor] Text validation failed:', validation.error);
+          rlog.warn('tutor.text.validation_failed', { error: validation.error });
           return NextResponse.json({ error: validation.error }, { status: 400 });
         }
         
@@ -655,7 +664,7 @@ export const POST = withApiGuard(
         result = parseCorrectionResult(gptResponse, inputText, workflow === 'audio-correction');
 
         const totalDuration = performance.now() - pipelineStart;
-        console.log('[tutor:perf] Text/OCR correction pipeline complete', {
+        rlog.info('tutor.perf.text_complete', {
           workflow,
           total_ms: Math.round(totalDuration),
           gpt_ms: Math.round(gptDuration),
@@ -665,9 +674,9 @@ export const POST = withApiGuard(
       }
 
       const wasCorrect = !result.error_categories || result.error_categories.length === 0;
-      updateStudentModel(user.id, result, tomContext.native_language as string).catch(console.error);
-      updateAccuracy(user.id, wasCorrect).catch(console.error);
-      saveCorrectionHistory(user.id, workflow, result, sessionId).catch(console.error);
+      updateStudentModel(user.id, result, tomContext.native_language as string).catch((e) => logger.error('tutor.student_model.update_failed', e));
+      updateAccuracy(user.id, wasCorrect).catch((e) => logger.error('tutor.accuracy.update_failed', e));
+      saveCorrectionHistory(user.id, workflow, result, sessionId).catch((e) => logger.error('tutor.history.save_failed', e));
 
       rlog.info('tutor.request.completed', {
         workflow,
@@ -734,5 +743,6 @@ export const POST = withApiGuard(
   {
     requireAuth: true,
     rateLimit: { requests: 60, window: 60 },
+    bodySchema: TutorTextBodySchema,
   }
 );
