@@ -14,6 +14,8 @@ const TutorTextBodySchema = z.object({
   ocr_text: z.string().min(1).max(2000).optional(),
 }).passthrough();
 import { buildN8nContext, updateStudentModel, saveCorrectionHistory, type CorrectionResult } from '@/lib/student-model';
+import { parseCorrectionResult } from '@/lib/correction-parser';
+import { validateAudioInput } from '@/lib/audio-validator';
 import { updateAccuracy } from '@/lib/adaptive-engine';
 import { logger, createRequestLogger, generateRequestId } from '@/lib/logger';
 import * as Sentry from '@sentry/nextjs';
@@ -392,118 +394,10 @@ const AUDIO_SYSTEM_PROMPT = `Du bist ein erfahrener Deutschtutor. Der Schüler s
 
 Wichtig: Immer dieses exakte JSON-Format verwenden.`;
 
-function parseCorrectionResult(text: string, fallbackOriginal: string, isAudio = false): CorrectionResult {
-  try {
-    // Strip markdown code fences GPT occasionally wraps around JSON
-    const stripped = text
-      .replace(/```json\s*/gi, '')
-      .replace(/```\s*/gi, '')
-      .trim();
-
-    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON found in response');
-
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-    } catch {
-      logger.error('tutor.parse.invalid_json', undefined, {
-        responsePreview: stripped.substring(0, 200),
-      });
-      throw new Error('INVALID_JSON_RESPONSE');
-    }
-
-    // Extract new German-response format fields
-    const errorType = (parsed.error_type as string | null);
-    const errorCategory = (parsed.error_category as string);
-    // Clamp confidence to valid [0, 1] range
-    const rawConfidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.85;
-    const confidence = Math.max(0, Math.min(1, rawConfidence));
-    let explanationDe = (parsed.explanation_de as string) || '';
-
-    // Add pronunciation guidance for audio if confidence is low
-    if (isAudio && confidence < 0.7) {
-      explanationDe += `\n\n💡 **Aussprache-Tipp:** Höre dir die richtige Aussprache an und vergleiche mit deiner Aufnahme.`;
-    }
-
-    logger.info('tutor.parse.success', {
-      hasErrors: errorType !== null,
-      errorCategory,
-      confidence,
-      cefr: parsed.cefr_estimate,
-      pronunciationNote: isAudio && confidence < 0.7,
-    });
-
-    return {
-      original: (parsed.original as string) || fallbackOriginal,
-      corrected: (parsed.corrected as string) || fallbackOriginal,
-      error_categories: errorType ? [errorCategory || 'Sonstiges'] : [],
-      error_type: errorType,
-      confidence,
-      explanation_de: explanationDe,
-      cefr_estimate: (parsed.cefr_estimate as string) || 'B1',
-      new_vocabulary: (parsed.new_vocabulary as CorrectionResult['new_vocabulary']) || [],
-    };
-  } catch (err) {
-    logger.error('tutor.parse.failed', err);
-    throw new Error('GPT_FAILED');
-  }
-}
-
-// ─── Input Validation ──────────────────────────────────────────────────
-
-function validateAudioInput(file: File): { valid: boolean; error?: string } {
-  // Size limits
-  const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB — Azure Whisper limit
-  const MIN_AUDIO_BYTES = 100; // 100 bytes minimum (basically a header)
-
-  if (file.size > MAX_AUDIO_BYTES) {
-    return {
-      valid: false,
-      error: `Audio-Datei zu groß (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum ist 25 MB.`
-    };
-  }
-
-  if (file.size < MIN_AUDIO_BYTES) {
-    return { valid: false, error: 'Audio-Datei ist zu klein oder beschädigt.' };
-  }
-
-  // MIME type validation
-  const ALLOWED_TYPES = new Set([
-    'audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/mp3',
-    'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/aac',
-    'audio/flac', 'audio/x-m4a',
-  ]);
-  const fileType = file.type?.toLowerCase() ?? '';
-  
-  if (fileType && !fileType.startsWith('audio/') && !ALLOWED_TYPES.has(fileType)) {
-    return {
-      valid: false,
-      error: `Audio-Format nicht unterstützt. Verwenden Sie MP3, WAV, OGG, FLAC oder WebM.`
-    };
-  }
-
-  // Rough duration estimate: assume ~128kbps bitrate average
-  const estimatedSeconds = (file.size * 8) / (128 * 1024);
-  const MAX_DURATION = 60 * 10; // 10 minutes max
-  const MIN_DURATION = 1; // At least 1 second
-
-  if (estimatedSeconds > MAX_DURATION) {
-    return {
-      valid: false,
-      error: 'Audio-Datei ist zu lang (geschätzt über 10 Minuten). Bitte eine kürzere Aufnahme versuchen.'
-    };
-  }
-
-  if (estimatedSeconds < MIN_DURATION && file.size > 500) {
-    return {
-      valid: false,
-      error: 'Audio-Datei enthält zu wenig Audio-Daten. Bitte mindestens 1 Sekunde aufnehmen.'
-    };
-  }
-
-  return { valid: true };
-}
+// parseCorrectionResult and validateAudioInput live in:
+//   src/lib/correction-parser.ts
+//   src/lib/audio-validator.ts
+// (imported above)
 
 function validateTextInput(text: string): { valid: boolean; error?: string } {
   if (!text || !text.trim()) {
