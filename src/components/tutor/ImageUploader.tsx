@@ -57,16 +57,18 @@ export default function ImageUploader({ onTextExtracted, disabled }: ImageUpload
         });
 
         // Extract per-word confidence and build confidence-tracked lines
-        const words = result.data.words || [];
-        const confidences = words.map((w: any) => w.confidence / 100);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ocrData = result.data as any;
+        const words: Array<{ confidence: number }> = ocrData.words || [];
+        const confidences = words.map((w) => w.confidence / 100);
         const overallConf = confidences.length > 0
           ? Math.round((confidences.reduce((a, b) => a + b, 0) / confidences.length) * 100) / 100
           : 0;
         setOverallConfidence(overallConf);
 
         // Extract text with per-line confidence tracking
-        const lines = result.data.lines || [];
-        const lineData: OCRLine[] = lines.map((line: any) => ({
+        const lines: Array<{ text: string; confidence: number }> = ocrData.lines || [];
+        const lineData: OCRLine[] = lines.map((line) => ({
           text: line.text.trim(),
           confidence: line.confidence / 100,
         })).filter((l: OCRLine) => l.text.length > 0);

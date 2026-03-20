@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
   console.error('[stripe:webhook] STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET is not set');
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     event = stripe.webhooks.constructEvent(body, sig, WEBHOOK_SECRET);
   } catch (err) {
-    console.error('[stripe/webhook] signature verification failed:', err);
+    logger.error('stripe.webhook.signature_invalid', err);
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await markProcessed(supabase, event.id);
     return NextResponse.json({ received: true });
   } catch (err) {
-    console.error('[stripe/webhook] handler error:', err);
+    logger.error('stripe.webhook.handler_failed', err, { eventId: event.id, eventType: event.type });
     // Return 500 so Stripe retries with exponential backoff.
     // The processed_stripe_events idempotency guard prevents double-processing.
     return NextResponse.json({ error: 'Internal processing error' }, { status: 500 });

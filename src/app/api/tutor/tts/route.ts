@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withApiGuard } from '@/lib/api-guard';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 const TTSSchema = z.object({
   text: z.string().min(1).max(500),
@@ -43,7 +44,7 @@ export const POST = withApiGuard(
     });
 
     if (!AZURE_SPEECH_KEY) {
-      console.error('[tutor:tts] Azure Speech not configured');
+      logger.error('tts.azure_speech_not_configured');
       return NextResponse.json(
         { error: 'Text-to-speech service not configured' },
         { status: 503 }
@@ -81,10 +82,7 @@ export const POST = withApiGuard(
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        console.error('[tutor:tts] Azure TTS error', {
-          status: response.status,
-          error: errorText,
-        });
+        logger.error('tts.azure_error', undefined, { status: response.status, error: errorText });
         return NextResponse.json(
           { error: 'Text-to-speech synthesis failed' },
           { status: 502 }
@@ -108,7 +106,7 @@ export const POST = withApiGuard(
         },
       });
     } catch (err) {
-      console.error('[tutor:tts] synthesis error:', err);
+      logger.error('tts.synthesis_failed', err, { userId: user.id, textLength: text.length });
       const message = err instanceof Error ? err.message : 'Unknown error';
       return NextResponse.json(
         { error: `Text-to-speech failed: ${message}` },

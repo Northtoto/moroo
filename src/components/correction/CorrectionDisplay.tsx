@@ -113,7 +113,9 @@ export default function CorrectionDisplay({
   const [showXp, setShowXp] = useState(false);
   const [xpVisible, setXpVisible] = useState(false);
   const [explanationOpen, setExplanationOpen] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const diff = computeDiff(original, corrected);
   const isCorrect = original.trim().toLowerCase() === corrected.trim().toLowerCase();
@@ -135,14 +137,40 @@ export default function CorrectionDisplay({
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [typewriterDuration]);
 
-  const speak = useCallback((text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'de-DE';
-    utterance.rate = 0.9; // Slightly slower for learners
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utterance);
-  }, []);
+  const speak = useCallback(async (text: string) => {
+    if (isSpeaking) {
+      // Stop current playback
+      audioRef.current?.pause();
+      setIsSpeaking(false);
+      return;
+    }
+    setIsSpeaking(true);
+    try {
+      const res = await fetch('/api/tutor/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: 'Katja' }),
+      });
+      if (!res.ok) throw new Error('TTS request failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch {
+      // Fallback to browser TTS if Azure fails
+      setIsSpeaking(false);
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'de-DE';
+        utterance.rate = 0.9;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utterance);
+      }
+    }
+  }, [isSpeaking]);
 
   // Build typewriter with delays across words
   let charOffset = 0;
@@ -194,14 +222,22 @@ export default function CorrectionDisplay({
         <button
           type="button"
           onClick={() => speak(corrected)}
-          className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/10"
-          style={{ color: 'var(--text-muted)' }}
-          aria-label="Vorlesefunktion"
+          disabled={false}
+          className="flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/10 disabled:opacity-50"
+          style={{ color: isSpeaking ? 'var(--amber)' : 'var(--text-muted)' }}
+          aria-label={isSpeaking ? 'Wiedergabe stoppen' : 'Aussprache anhören'}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M12 6a9 9 0 010 12M8.464 8.464a5 5 0 000 7.072" />
-          </svg>
-          Anhören
+          {isSpeaking ? (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 animate-pulse">
+              <rect x="6" y="5" width="4" height="14" rx="1" />
+              <rect x="14" y="5" width="4" height="14" rx="1" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M12 6a9 9 0 010 12M8.464 8.464a5 5 0 000 7.072" />
+            </svg>
+          )}
+          {isSpeaking ? 'Stoppen' : 'Anhören'}
         </button>
       </div>
 

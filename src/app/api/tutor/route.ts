@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withApiGuard } from '@/lib/api-guard';
 import { buildN8nContext, updateStudentModel, type CorrectionResult } from '@/lib/student-model';
 import { updateAccuracy } from '@/lib/adaptive-engine';
+import { logger } from '@/lib/logger';
 
 const AZURE_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT ?? '';
 const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY ?? '';
@@ -477,7 +478,7 @@ export const POST = withApiGuard(
 
         console.log('[tutor] Audio file received', { name: audioFile.name, size: audioFile.size, type: audioFile.type });
 
-        const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: fileType || 'audio/webm' });
+        const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type || 'audio/webm' });
         
         console.log('[tutor] Starting audio pipeline...');
         const pipelineStart = performance.now();
@@ -590,9 +591,9 @@ export const POST = withApiGuard(
 
       const { code, userMessage, logContext } = classifyError(err, errorSource);
 
-      console.error('[tutor] request failed', {
+      logger.error('tutor.request.failed', err, {
         errorCode: code,
-        errorContext: logContext,
+        source: logContext.source,
         workflow: (contentType.includes('multipart') ? 'audio' : 'text/json'),
         userId: user.id,
       });
