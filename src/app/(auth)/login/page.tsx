@@ -40,7 +40,6 @@ export default function LoginPage() {
         setExistingUserEmail(data.user.email ?? null);
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const MAX_CLIENT_ATTEMPTS = 5;

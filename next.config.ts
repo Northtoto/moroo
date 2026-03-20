@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   images: {
@@ -32,4 +33,19 @@ const nextConfig: NextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // ── Source maps (upload to Sentry, hidden from browser) ──────────────────
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI, // only show Sentry build output in CI
+
+  // ── Automatic instrumentation ─────────────────────────────────────────────
+  autoInstrumentServerFunctions: true,
+  autoInstrumentMiddleware: true,
+  autoInstrumentAppDirectory: true,
+
+  // ── Bundle optimisation ───────────────────────────────────────────────────
+  widenClientFileUpload: true,
+  disableLogger: true, // removes Sentry debug logs from production bundle
+  sourcemaps: { disable: false, deleteSourcemapsAfterUpload: true },
+});

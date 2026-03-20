@@ -24,7 +24,6 @@ interface DiffToken {
 function computeDiff(original: string, corrected: string): DiffToken[] {
   const origWords = original.trim().split(/\s+/);
   const corrWords = corrected.trim().split(/\s+/);
-  const result: DiffToken[] = [];
 
   // Simple LCS-based diff
   const m = origWords.length;
@@ -101,9 +100,9 @@ export default function CorrectionDisplay({
   explanation_de,
   error_type,
   confidence,
-  error_categories,
+  error_categories: _error_categories,
   new_vocabulary,
-  cefr_estimate,
+  cefr_estimate: _cefr_estimate,
   transcription,
   inputType,
   xpEarned = 10,

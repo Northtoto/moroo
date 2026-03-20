@@ -8,6 +8,14 @@
  */
 
 export async function register() {
+  // ── Sentry initialisation (must be first) ────────────────────────────────
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('../sentry.server.config');
+  }
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    await import('../sentry.edge.config');
+  }
+
   // Only run on the server (not edge runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { validateEnv } = await import('@/lib/env-check');

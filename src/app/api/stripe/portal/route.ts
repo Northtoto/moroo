@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_missing', {
   apiVersion: '2026-02-25.clover',
 });
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(_req: NextRequest): Promise<NextResponse> {
   try {
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();

@@ -3,7 +3,7 @@
 // POST { card_id, rating: 1-4 } → updated due date + new FSRS state
 // GET  → fetch due cards for today
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withApiGuard, FlashcardReviewSchema } from '@/lib/api-guard';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { fsrs, generatorParameters, Rating, type Card, type FSRSParameters } from 'ts-fsrs';

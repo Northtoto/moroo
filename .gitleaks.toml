@@ -1,0 +1,112 @@
+# ─── Gitleaks Configuration ───────────────────────────────────────────────────
+# Project-specific secret scanning rules for Morodeutsch.
+# Extends the default gitleaks ruleset with patterns specific to our stack.
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "Morodeutsch Secret Scanner"
+
+# ─── Extend built-in rules ────────────────────────────────────────────────────
+[extend]
+useDefault = true   # inherits ~100 built-in rules (AWS, GCP, GitHub tokens, etc.)
+
+# ─── Project-specific rules ───────────────────────────────────────────────────
+
+[[rules]]
+id = "azure-openai-key"
+description = "Azure OpenAI API Key"
+regex = '''(?i)(azure[_-]openai[_-]api[_-]key|AZURE_OPENAI_API_KEY)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9]{32,})["']?'''
+secretGroup = 2
+tags = ["azure", "openai", "api-key"]
+
+[[rules]]
+id = "azure-speech-key"
+description = "Azure Speech Service Key"
+regex = '''(?i)(azure[_-]speech[_-]key|NEXT_PUBLIC_AZURE_SPEECH_KEY)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9]{32,})["']?'''
+secretGroup = 2
+tags = ["azure", "speech", "api-key"]
+
+[[rules]]
+id = "supabase-service-role-key"
+description = "Supabase Service Role Key (high privilege — never expose)"
+regex = '''(?i)(supabase[_-]service[_-]role[_-]key|SUPABASE_SERVICE_ROLE_KEY)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9._-]{100,})["']?'''
+secretGroup = 2
+tags = ["supabase", "service-role", "critical"]
+
+[[rules]]
+id = "supabase-anon-key"
+description = "Supabase Anon Key"
+regex = '''(?i)(supabase[_-]anon[_-]key|NEXT_PUBLIC_SUPABASE_ANON_KEY)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9._-]{100,})["']?'''
+secretGroup = 2
+tags = ["supabase", "anon-key"]
+
+[[rules]]
+id = "upstash-redis-token"
+description = "Upstash Redis REST Token"
+regex = '''(?i)(upstash[_-]redis[_-]rest[_-]token|UPSTASH_REDIS_REST_TOKEN)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9_-]{40,})["']?'''
+secretGroup = 2
+tags = ["upstash", "redis"]
+
+[[rules]]
+id = "stripe-secret-key"
+description = "Stripe Secret Key"
+regex = '''sk_(live|test)_[a-zA-Z0-9]{24,}'''
+tags = ["stripe", "payment", "critical"]
+
+[[rules]]
+id = "stripe-webhook-secret"
+description = "Stripe Webhook Signing Secret"
+regex = '''whsec_[a-zA-Z0-9]{32,}'''
+tags = ["stripe", "webhook"]
+
+[[rules]]
+id = "sentry-auth-token"
+description = "Sentry Authentication Token"
+regex = '''(?i)(sentry[_-]auth[_-]token|SENTRY_AUTH_TOKEN)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9]{64,})["']?'''
+secretGroup = 2
+tags = ["sentry", "auth-token"]
+
+[[rules]]
+id = "sentry-dsn"
+description = "Sentry DSN with credentials"
+regex = '''https://[a-f0-9]{32}@[a-z0-9]+\.ingest\.sentry\.io/[0-9]+'''
+tags = ["sentry", "dsn"]
+
+[[rules]]
+id = "internal-api-secret"
+description = "Morodeutsch Internal API Secret"
+regex = '''(?i)(gws[_-]internal[_-]secret|health[_-]secret|metrics[_-]api[_-]key|GWS_INTERNAL_SECRET|HEALTH_SECRET|METRICS_API_KEY)[^\S\r\n]*[=:][^\S\r\n]*["']?([a-zA-Z0-9_-]{16,})["']?'''
+secretGroup = 2
+tags = ["internal", "api-key"]
+
+# ─── Allowlist ────────────────────────────────────────────────────────────────
+# Exclude placeholder values from .env.example and test fixtures
+
+[[rules.allowlist]]
+description = "Placeholder values in .env.example"
+paths = ['''.env.example''']
+
+[allowlist]
+description = "Global allowlist for known safe patterns"
+# Exclude files that contain placeholder/documentation values
+paths = [
+  '''.env.example''',
+  '''\.md$''',
+  '''tests/.*''',
+  '''reports/.*''',
+]
+# Exclude common placeholder patterns
+regexTarget = "match"
+regexes = [
+  '''<[a-z-]+>''',           # <placeholder> style
+  '''your[-_][a-z]+''',      # your-api-key style
+  '''example''',             # anything with "example"
+  '''sk_test_<''',           # explicit placeholder
+  '''whsec_<''',
+]
+
+# ─── Scan configuration ───────────────────────────────────────────────────────
+
+[allowlist.commits]
+# Skip the initial architecture commit (no real secrets, only scaffold)
+# Add commit SHAs here if a specific commit triggers false positives:
+# commits = ["abc123"]

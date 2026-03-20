@@ -81,7 +81,7 @@ function ScoreBadge({ score }: { score: PronunciationScore }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function VoicePage() {
-  const [status, setStatus] = useState<ConversationStatus>('idle');
+  const [status, _setStatus] = useState<ConversationStatus>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [lastReferenceText, setLastReferenceText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);

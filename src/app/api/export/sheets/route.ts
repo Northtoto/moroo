@@ -22,7 +22,7 @@ function gws(args: string): unknown {
 }
 
 // ─── Route handler ─────────────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   // 1. Auth — only authenticated users can export their own data
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();

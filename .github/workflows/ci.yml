@@ -1,0 +1,69 @@
+# ─── CI Pipeline ──────────────────────────────────────────────────────────────
+# Runs on every commit and pull request.
+# Steps: install → typecheck → lint → tutor tests
+# Prevents broken code from entering production.
+
+name: CI
+
+on:
+  push:
+    branches: ["master", "main", "feature/**", "fix/**"]
+  pull_request:
+    branches: ["master", "main"]
+
+concurrency:
+  # Cancel in-progress runs for same branch/PR (saves CI minutes)
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Node.js ───────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # ── 3. Install dependencies ────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+        # --ignore-scripts: prevents postinstall hooks from running in CI
+        # (safer and faster; Sentry/Next.js don't need them here)
+
+      # ── 4. TypeScript check ────────────────────────────────────────────────
+      - name: TypeScript typecheck
+        run: npm run typecheck
+        # Catches type errors without producing build output.
+        # Runs tsc --noEmit — same compiler, no extra config needed.
+
+      # ── 5. Lint ────────────────────────────────────────────────────────────
+      - name: ESLint
+        run: npm run lint
+        # Catches unused vars, no-eval, and Next.js best-practice violations.
+
+      # ── 6. Tutor tests ─────────────────────────────────────────────────────
+      - name: Run tutor test suite
+        run: npm run test:tutor
+        # Runs all 179 tests in tests/tutor/ (text, audio, OCR, TTS, pipeline).
+
+      # ── 7. Upload test results (always, so failures are visible) ───────────
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

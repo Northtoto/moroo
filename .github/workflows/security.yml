@@ -1,0 +1,117 @@
+# ─── Security Scanning Pipeline ───────────────────────────────────────────────
+# Runs on every push and PR. Three layers:
+#   1. npm audit        — known CVEs in installed packages
+#   2. Dependency scan  — Trivy SBOM scan for transitive vulnerabilities
+#   3. Secret scan      — Gitleaks scans full git history for leaked credentials
+#
+# Required GitHub secret: GITLEAKS_LICENSE (only needed for private repos on free plan)
+# All other tools are free and need no configuration.
+
+name: Security Scan
+
+on:
+  push:
+    branches: ["master", "main", "feature/**", "fix/**"]
+  pull_request:
+    branches: ["master", "main"]
+  schedule:
+    # Weekly full scan every Monday at 08:00 UTC
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: read
+  security-events: write   # needed to upload SARIF results to GitHub Security tab
+
+jobs:
+  # ─── Job 1: npm audit ─────────────────────────────────────────────────────
+  npm-audit:
+    name: npm audit (CVE scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run npm audit (production deps — fail on high/critical)
+        run: npm audit --audit-level=high --omit=dev
+        # Fails the job if any high or critical CVE is found in production deps
+
+      - name: Run npm audit (all deps — report only, no fail)
+        run: npm audit --audit-level=moderate || true
+        # Dev dep vulnerabilities are reported but don't block the build
+
+      - name: Generate audit report
+        if: always()
+        run: npm audit --json > npm-audit-report.json || true
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: npm-audit-report.json
+          retention-days: 30
+
+  # ─── Job 2: Dependency Vulnerability Scan (Trivy) ─────────────────────────
+  dependency-scan:
+    name: Trivy dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy — scan package.json and lock file
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "vuln"
+          severity: "HIGH,CRITICAL"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          # Only scan npm ecosystem
+          skip-dirs: ".next,node_modules/.cache"
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-dependency"
+
+      - name: Run Trivy — fail on CRITICAL only (blocking)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "vuln"
+          severity: "CRITICAL"
+          exit-code: "1"
+          skip-dirs: ".next,node_modules/.cache"
+
+  # ─── Job 3: Secret Scanning (Gitleaks) ────────────────────────────────────
+  secret-scan:
+    name: Gitleaks secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history — gitleaks scans all commits
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # ^ Uncomment if this is a private repo (free plan requires license for private)
+        with:
+          args: "--config .gitleaks.toml"

@@ -151,7 +151,7 @@ export default function ProfilePage() {
 
   // Password change
   const [showPwForm, setShowPwForm] = useState(false);
-  const [pwCurrent, setPwCurrent] = useState('');
+  const [_pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
 

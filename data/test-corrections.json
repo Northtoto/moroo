@@ -1,0 +1,464 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-03-20",
+    "description": "50 authentic German learner mistakes for tutor quality evaluation",
+    "cefr_distribution": { "A1": 10, "A2": 12, "B1": 15, "B2": 8, "C1": 5 },
+    "error_categories": [
+      "Artikel", "Wortstellung", "Konjugation", "Präposition",
+      "Kasus", "Rechtschreibung", "Vokabular", "Zeitform"
+    ]
+  },
+  "test_cases": [
+    {
+      "id": 1,
+      "input": "Ich gehe zu schule",
+      "expected_correction": "Ich gehe zur Schule",
+      "error_category": "Artikel",
+      "error_type": "Artikel-Fehler",
+      "cefr_level": "A1",
+      "explanation_hint": "zu + die = zur (Dativ-Kontraktion)"
+    },
+    {
+      "id": 2,
+      "input": "Ich habe gegangen zur Schule",
+      "expected_correction": "Ich bin zur Schule gegangen",
+      "error_category": "Konjugation",
+      "error_type": "Hilfsverb-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "gehen uses sein, not haben; also word order with Partizip II"
+    },
+    {
+      "id": 3,
+      "input": "Ich bin 20 Jahre alt alt",
+      "expected_correction": "Ich bin 20 Jahre alt",
+      "error_category": "Rechtschreibung",
+      "error_type": "Wortwiederholung",
+      "cefr_level": "A1",
+      "explanation_hint": "Duplicated word"
+    },
+    {
+      "id": 4,
+      "input": "Der Hund von mein Freund ist groß",
+      "expected_correction": "Der Hund meines Freundes ist groß",
+      "error_category": "Kasus",
+      "error_type": "Genitiv-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "Possession requires Genitiv or von + Dativ"
+    },
+    {
+      "id": 5,
+      "input": "Ich möchte ein Kaffee bitte",
+      "expected_correction": "Ich möchte einen Kaffee, bitte",
+      "error_category": "Kasus",
+      "error_type": "Akkusativ-Fehler",
+      "cefr_level": "A1",
+      "explanation_hint": "möchten requires Akkusativ: ein → einen (maskulin)"
+    },
+    {
+      "id": 6,
+      "input": "Gestern ich habe ein Buch gelesen",
+      "expected_correction": "Gestern habe ich ein Buch gelesen",
+      "error_category": "Wortstellung",
+      "error_type": "V2-Stellung",
+      "cefr_level": "A2",
+      "explanation_hint": "Verb must be in second position (V2 rule)"
+    },
+    {
+      "id": 7,
+      "input": "Sie geht in den Supermarkt für Milch kaufen",
+      "expected_correction": "Sie geht in den Supermarkt, um Milch zu kaufen",
+      "error_category": "Wortstellung",
+      "error_type": "um...zu Konstruktion",
+      "cefr_level": "B1",
+      "explanation_hint": "Purpose clauses use um...zu + Infinitiv"
+    },
+    {
+      "id": 8,
+      "input": "Ich interessiere für Musik",
+      "expected_correction": "Ich interessiere mich für Musik",
+      "error_category": "Konjugation",
+      "error_type": "Reflexivpronomen fehlt",
+      "cefr_level": "A2",
+      "explanation_hint": "sich interessieren is reflexive"
+    },
+    {
+      "id": 9,
+      "input": "Die Kinder spielt im Garten",
+      "expected_correction": "Die Kinder spielen im Garten",
+      "error_category": "Konjugation",
+      "error_type": "Verb-Konjugation",
+      "cefr_level": "A1",
+      "explanation_hint": "Plural subject requires plural verb conjugation"
+    },
+    {
+      "id": 10,
+      "input": "Ich wohne in Deutschland seit drei Jahren",
+      "expected_correction": "Ich wohne seit drei Jahren in Deutschland",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "A2",
+      "explanation_hint": "TeKaMoLo: temporal before local"
+    },
+    {
+      "id": 11,
+      "input": "Ich habe ein neue Auto gekauft",
+      "expected_correction": "Ich habe ein neues Auto gekauft",
+      "error_category": "Kasus",
+      "error_type": "Adjektivdeklination",
+      "cefr_level": "B1",
+      "explanation_hint": "Adjective ending with ein + neuter Akkusativ = -es"
+    },
+    {
+      "id": 12,
+      "input": "Er hat mir gesagt dass er kommt morgen",
+      "expected_correction": "Er hat mir gesagt, dass er morgen kommt",
+      "error_category": "Wortstellung",
+      "error_type": "Nebensatz-Wortstellung",
+      "cefr_level": "B1",
+      "explanation_hint": "In dass-clauses, verb goes to the end"
+    },
+    {
+      "id": 13,
+      "input": "Ich fahre mit mein Auto",
+      "expected_correction": "Ich fahre mit meinem Auto",
+      "error_category": "Kasus",
+      "error_type": "Dativ-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "mit requires Dativ: mein → meinem (neuter)"
+    },
+    {
+      "id": 14,
+      "input": "Das Wetter ist kalt heute",
+      "expected_correction": "Das Wetter ist heute kalt",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "A1",
+      "explanation_hint": "Time expressions typically precede manner/adjectives"
+    },
+    {
+      "id": 15,
+      "input": "Ich habe Angst auf Spinnen",
+      "expected_correction": "Ich habe Angst vor Spinnen",
+      "error_category": "Präposition",
+      "error_type": "Präposition falsch",
+      "cefr_level": "A2",
+      "explanation_hint": "Angst haben vor + Dativ, not auf"
+    },
+    {
+      "id": 16,
+      "input": "Sie ist mehr groß als ich",
+      "expected_correction": "Sie ist größer als ich",
+      "error_category": "Vokabular",
+      "error_type": "Komparativ-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "German uses -er suffix for comparative, not mehr + adjective"
+    },
+    {
+      "id": 17,
+      "input": "Wenn ich wäre reich, würde ich reisen",
+      "expected_correction": "Wenn ich reich wäre, würde ich reisen",
+      "error_category": "Wortstellung",
+      "error_type": "Konjunktiv-Wortstellung",
+      "cefr_level": "B2",
+      "explanation_hint": "In wenn-clauses, conjugated verb goes to end"
+    },
+    {
+      "id": 18,
+      "input": "Ich kann nicht sprechen gut Deutsch",
+      "expected_correction": "Ich kann nicht gut Deutsch sprechen",
+      "error_category": "Wortstellung",
+      "error_type": "Satzklammer",
+      "cefr_level": "A2",
+      "explanation_hint": "Modal verb frame: können...sprechen with content between"
+    },
+    {
+      "id": 19,
+      "input": "Er arbeitet in eine Bank",
+      "expected_correction": "Er arbeitet in einer Bank",
+      "error_category": "Kasus",
+      "error_type": "Dativ-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "in + location (no movement) = Dativ: eine → einer (fem)"
+    },
+    {
+      "id": 20,
+      "input": "Ich habe das Buch auf den Tisch gelegt",
+      "expected_correction": "Ich habe das Buch auf den Tisch gelegt",
+      "error_category": null,
+      "error_type": null,
+      "cefr_level": "B1",
+      "explanation_hint": "Correct sentence - should return confidence 1.0"
+    },
+    {
+      "id": 21,
+      "input": "Meine Schwester haben zwei Kinder",
+      "expected_correction": "Meine Schwester hat zwei Kinder",
+      "error_category": "Konjugation",
+      "error_type": "Verb-Konjugation",
+      "cefr_level": "A1",
+      "explanation_hint": "Singular subject (Schwester) requires 3rd person singular verb"
+    },
+    {
+      "id": 22,
+      "input": "Ich denke über meine Zukunft",
+      "expected_correction": "Ich denke an meine Zukunft",
+      "error_category": "Präposition",
+      "error_type": "Präposition falsch",
+      "cefr_level": "B1",
+      "explanation_hint": "denken an + Akkusativ, not über"
+    },
+    {
+      "id": 23,
+      "input": "Das Essen schmeckt sehr gut hier",
+      "expected_correction": "Das Essen schmeckt hier sehr gut",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "A2",
+      "explanation_hint": "TeKaMoLo ordering: local before manner"
+    },
+    {
+      "id": 24,
+      "input": "Ich habe gefahren nach Berlin letztes Wochenende",
+      "expected_correction": "Ich bin letztes Wochenende nach Berlin gefahren",
+      "error_category": "Konjugation",
+      "error_type": "Hilfsverb-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "fahren uses sein; also word order and Partizip II at end"
+    },
+    {
+      "id": 25,
+      "input": "Wir müssen gehen zum Arzt",
+      "expected_correction": "Wir müssen zum Arzt gehen",
+      "error_category": "Wortstellung",
+      "error_type": "Satzklammer",
+      "cefr_level": "A2",
+      "explanation_hint": "Infinitive goes to end in modal verb construction"
+    },
+    {
+      "id": 26,
+      "input": "Ich freue auf die Ferien",
+      "expected_correction": "Ich freue mich auf die Ferien",
+      "error_category": "Konjugation",
+      "error_type": "Reflexivpronomen fehlt",
+      "cefr_level": "A2",
+      "explanation_hint": "sich freuen auf is reflexive"
+    },
+    {
+      "id": 27,
+      "input": "Die Lehrerin, die ich mag sie, ist nett",
+      "expected_correction": "Die Lehrerin, die ich mag, ist nett",
+      "error_category": "Wortstellung",
+      "error_type": "Relativsatz-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "No pronoun doubling in relative clauses"
+    },
+    {
+      "id": 28,
+      "input": "Ich bin einverstanden auf deinen Vorschlag",
+      "expected_correction": "Ich bin mit deinem Vorschlag einverstanden",
+      "error_category": "Präposition",
+      "error_type": "Präposition falsch",
+      "cefr_level": "B2",
+      "explanation_hint": "einverstanden sein mit + Dativ"
+    },
+    {
+      "id": 29,
+      "input": "Er geht zu Hause",
+      "expected_correction": "Er geht nach Hause",
+      "error_category": "Präposition",
+      "error_type": "Präposition falsch",
+      "cefr_level": "A1",
+      "explanation_hint": "nach Hause (direction) vs. zu Hause (location)"
+    },
+    {
+      "id": 30,
+      "input": "Das ist der Mann wer ich gesehen habe",
+      "expected_correction": "Das ist der Mann, den ich gesehen habe",
+      "error_category": "Kasus",
+      "error_type": "Relativpronomen-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "Relative pronoun must match case: Akkusativ den, not wer"
+    },
+    {
+      "id": 31,
+      "input": "Ich möchte nach Hause gehen weil ich müde bin",
+      "expected_correction": "Ich möchte nach Hause gehen, weil ich müde bin",
+      "error_category": "Rechtschreibung",
+      "error_type": "Komma-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "Comma required before subordinating conjunctions (weil, dass, wenn)"
+    },
+    {
+      "id": 32,
+      "input": "Obwohl es regnet, aber ich gehe spazieren",
+      "expected_correction": "Obwohl es regnet, gehe ich spazieren",
+      "error_category": "Wortstellung",
+      "error_type": "Doppelte Konjunktion",
+      "cefr_level": "B2",
+      "explanation_hint": "obwohl and aber cannot be combined; obwohl alone with V2 in main clause"
+    },
+    {
+      "id": 33,
+      "input": "Ich erinnere den Tag",
+      "expected_correction": "Ich erinnere mich an den Tag",
+      "error_category": "Konjugation",
+      "error_type": "Reflexivpronomen fehlt",
+      "cefr_level": "B1",
+      "explanation_hint": "sich erinnern an + Akkusativ"
+    },
+    {
+      "id": 34,
+      "input": "Die Tür ist offen geworden von dem Wind",
+      "expected_correction": "Die Tür wurde vom Wind geöffnet",
+      "error_category": "Zeitform",
+      "error_type": "Passiv-Fehler",
+      "cefr_level": "B2",
+      "explanation_hint": "Passive with werden + Partizip II; offen is adjective, not Partizip II"
+    },
+    {
+      "id": 35,
+      "input": "Ich bin in Deutschland seit fünf Monaten und ich liebe es",
+      "expected_correction": "Ich bin seit fünf Monaten in Deutschland und ich liebe es",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "A2",
+      "explanation_hint": "Temporal expressions before local (TeKaMoLo)"
+    },
+    {
+      "id": 36,
+      "input": "Ich habe viel Spaß gehabt auf der Party",
+      "expected_correction": "Ich habe auf der Party viel Spaß gehabt",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "B1",
+      "explanation_hint": "Prepositional phrases typically precede the main content"
+    },
+    {
+      "id": 37,
+      "input": "Der Film was ich gesehen habe war toll",
+      "expected_correction": "Der Film, den ich gesehen habe, war toll",
+      "error_category": "Kasus",
+      "error_type": "Relativpronomen-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "was is not a relative pronoun for definite nouns; use den (Akk mask)"
+    },
+    {
+      "id": 38,
+      "input": "Ich bin aufgestanden um 7 Uhr",
+      "expected_correction": "Ich bin um 7 Uhr aufgestanden",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "A2",
+      "explanation_hint": "Partizip II goes to the end in Perfekt"
+    },
+    {
+      "id": 39,
+      "input": "Kannst du mir helfen mit die Hausaufgaben?",
+      "expected_correction": "Kannst du mir mit den Hausaufgaben helfen?",
+      "error_category": "Kasus",
+      "error_type": "Dativ-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "mit requires Dativ: die → den (plural); also infinitive at end"
+    },
+    {
+      "id": 40,
+      "input": "Sie hat gesagt mir dass sie kommt später",
+      "expected_correction": "Sie hat mir gesagt, dass sie später kommt",
+      "error_category": "Wortstellung",
+      "error_type": "Nebensatz-Wortstellung",
+      "cefr_level": "B1",
+      "explanation_hint": "Dativ object before Partizip II; verb at end in dass-clause"
+    },
+    {
+      "id": 41,
+      "input": "Ich habe das nie gemacht vorher",
+      "expected_correction": "Ich habe das vorher nie gemacht",
+      "error_category": "Wortstellung",
+      "error_type": "Wortstellung",
+      "cefr_level": "B1",
+      "explanation_hint": "Time adverbs before negation before Partizip II"
+    },
+    {
+      "id": 42,
+      "input": "Er is sehr intelligent",
+      "expected_correction": "Er ist sehr intelligent",
+      "error_category": "Rechtschreibung",
+      "error_type": "Rechtschreibung",
+      "cefr_level": "A1",
+      "explanation_hint": "ist not is (common English interference)"
+    },
+    {
+      "id": 43,
+      "input": "Nachdem ich habe gegessen, bin ich spazieren gegangen",
+      "expected_correction": "Nachdem ich gegessen hatte, bin ich spazieren gegangen",
+      "error_category": "Zeitform",
+      "error_type": "Plusquamperfekt-Fehler",
+      "cefr_level": "B2",
+      "explanation_hint": "nachdem requires Plusquamperfekt (hatte + PP) in the subordinate clause"
+    },
+    {
+      "id": 44,
+      "input": "Das Buch gehört zu mir",
+      "expected_correction": "Das Buch gehört mir",
+      "error_category": "Präposition",
+      "error_type": "Präposition falsch",
+      "cefr_level": "A2",
+      "explanation_hint": "gehören takes Dativ directly, no preposition needed"
+    },
+    {
+      "id": 45,
+      "input": "Ich habe zwei Bruder und eine Schwester",
+      "expected_correction": "Ich habe zwei Brüder und eine Schwester",
+      "error_category": "Kasus",
+      "error_type": "Plural-Fehler",
+      "cefr_level": "A1",
+      "explanation_hint": "Bruder → Brüder (Umlaut in plural)"
+    },
+    {
+      "id": 46,
+      "input": "Je mehr ich lerne, je besser ich spreche",
+      "expected_correction": "Je mehr ich lerne, desto besser spreche ich",
+      "error_category": "Vokabular",
+      "error_type": "Korrelat-Fehler",
+      "cefr_level": "B2",
+      "explanation_hint": "je...desto (not je...je); V2 in the desto-clause"
+    },
+    {
+      "id": 47,
+      "input": "Ich bin gewohnt an das kalte Wetter",
+      "expected_correction": "Ich bin an das kalte Wetter gewöhnt",
+      "error_category": "Vokabular",
+      "error_type": "Partizip-Fehler",
+      "cefr_level": "B2",
+      "explanation_hint": "gewöhnt (with Umlaut) and word order"
+    },
+    {
+      "id": 48,
+      "input": "Ich will eine Arzt werden",
+      "expected_correction": "Ich will Arzt werden",
+      "error_category": "Artikel",
+      "error_type": "Artikel-Fehler",
+      "cefr_level": "A2",
+      "explanation_hint": "No article with profession after werden"
+    },
+    {
+      "id": 49,
+      "input": "Die Kinder haben sich benehmt schlecht",
+      "expected_correction": "Die Kinder haben sich schlecht benommen",
+      "error_category": "Konjugation",
+      "error_type": "Partizip-II-Fehler",
+      "cefr_level": "B1",
+      "explanation_hint": "benehmen → benommen (strong verb, irregular Partizip II)"
+    },
+    {
+      "id": 50,
+      "input": "Trotz dem schlechten Wetter gingen wir wandern",
+      "expected_correction": "Trotz des schlechten Wetters gingen wir wandern",
+      "error_category": "Kasus",
+      "error_type": "Genitiv-Fehler",
+      "cefr_level": "C1",
+      "explanation_hint": "trotz requires Genitiv (formal): dem → des, Wetter → Wetters"
+    }
+  ]
+}

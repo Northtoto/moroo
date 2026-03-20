@@ -46,7 +46,7 @@ export default function LesenPage() {
     }
   }, []);
 
-  useEffect(() => { fetchArticles(targetCefr); }, []);  // eslint-disable-line
+  useEffect(() => { fetchArticles(targetCefr); }, []);
 
   async function saveToFlashcards(vocab: VocabItem) {
     if (savedWords.has(vocab.word)) return;

@@ -1,0 +1,65 @@
+# ─── Dependabot Configuration ─────────────────────────────────────────────────
+# Automatically opens PRs when dependencies have security patches or updates.
+# Weekly cadence keeps noise low while still catching vulnerabilities promptly.
+
+version: 2
+
+updates:
+  # ─── npm dependencies ────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Paris"
+    # Limit open PRs to avoid noise
+    open-pull-requests-limit: 10
+    # Group non-security updates to reduce PR count
+    groups:
+      next-ecosystem:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+      supabase:
+        patterns:
+          - "@supabase/*"
+      azure:
+        patterns:
+          - "web-speech-cognitive-services"
+      stripe:
+        patterns:
+          - "stripe"
+          - "@stripe/*"
+      dev-dependencies:
+        dependency-type: "development"
+    # Security updates always get individual PRs regardless of grouping
+    # (Dependabot does this automatically — groups only apply to version updates)
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps(dev)"
+      include: "scope"
+    # Ignore major version bumps (too risky for automated PRs)
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  # ─── GitHub Actions ───────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
