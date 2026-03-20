@@ -116,6 +116,9 @@ export default function TutorPage() {
         }
 
         const result: CorrectionResult = await res.json();
+        if (!result.original || !result.corrected) {
+          throw new Error('Ungültige Antwort vom Server erhalten. Bitte erneut versuchen.');
+        }
         const inputType: 'text' | 'audio' | 'image' =
           workflow === 'audio-correction' ? 'audio'
           : workflow === 'ocr-correction' ? 'image'

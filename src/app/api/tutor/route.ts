@@ -304,15 +304,31 @@ Wichtig: Immer dieses exakte JSON-Format verwenden.`;
 
 function parseCorrectionResult(text: string, fallbackOriginal: string, isAudio = false): CorrectionResult {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences GPT occasionally wraps around JSON
+    const stripped = text
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/gi, '')
+      .trim();
+
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON found in response');
 
-    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    } catch {
+      logger.error('tutor.parse.invalid_json', undefined, {
+        responsePreview: stripped.substring(0, 200),
+      });
+      throw new Error('INVALID_JSON_RESPONSE');
+    }
 
     // Extract new German-response format fields
     const errorType = (parsed.error_type as string | null);
     const errorCategory = (parsed.error_category as string);
-    const confidence = (parsed.confidence as number) ?? 0.85;
+    // Clamp confidence to valid [0, 1] range
+    const rawConfidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.85;
+    const confidence = Math.max(0, Math.min(1, rawConfidence));
     let explanationDe = (parsed.explanation_de as string) || '';
 
     // Add pronunciation guidance for audio if confidence is low
@@ -431,7 +447,7 @@ export const POST = withApiGuard(
     const user = ctx.user!;
     const contentType = req.headers.get('content-type') ?? '';
 
-    console.log(`[tutor] New request from user ${user.id}, contentType: ${contentType}`);
+    logger.info('tutor.request', { userId: user.id, contentType });
 
     if (!AZURE_ENDPOINT || !AZURE_API_KEY) {
       return NextResponse.json(
@@ -560,7 +576,7 @@ export const POST = withApiGuard(
       updateStudentModel(user.id, result, tomContext.native_language as string).catch(console.error);
       updateAccuracy(user.id, wasCorrect).catch(console.error);
 
-      console.log('[tutor] Request completed successfully', {
+      logger.info('tutor.request.completed', {
         workflow,
         hasErrors: result.error_categories.length > 0,
         confidence: result.confidence,

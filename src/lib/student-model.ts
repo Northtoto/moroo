@@ -9,6 +9,7 @@
 
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getL1PromptNote } from '@/data/l1-profiles';
+import { logger } from '@/lib/logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -304,7 +305,8 @@ export async function buildN8nContext(userId: string): Promise<{
       correction_count: context.top_errors.reduce((sum, e) => sum + e.count, 0),
       l1_prompt_note: getL1PromptNote(context.native_language),
     };
-  } catch {
+  } catch (err) {
+    logger.error('student_model.context_fetch_failed', err, { userId });
     return {
       native_language: 'English',
       cefr_level: 'A1',
