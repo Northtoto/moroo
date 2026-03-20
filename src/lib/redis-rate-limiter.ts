@@ -60,6 +60,8 @@ function fallbackCheck(key: string, limit: number, windowSec: number): boolean {
 // ─── Lazy Redis singleton ─────────────────────────────────────────────────────
 // undefined = not yet attempted; null = env vars absent (will use fallback)
 let _redis: Redis | null | undefined = undefined;
+// Declared before getRedis() to avoid TDZ if ever called during module init
+let _redisConfigured = false;
 
 function getRedis(): Redis | null {
   if (_redis !== undefined) return _redis;
@@ -80,9 +82,6 @@ function getRedis(): Redis | null {
 // Drop-in async replacement for the old synchronous checkRateLimit.
 // Returns true  → request is allowed
 // Returns false → request is rate-limited
-
-// Sentinel: true = Redis was configured (env vars present), false = not configured
-let _redisConfigured = false;
 
 export async function checkRateLimit(
   key: string,
