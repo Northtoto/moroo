@@ -266,6 +266,86 @@ async function callAzureGPT(systemPrompt: string, userMessage: string): Promise<
   }
 }
 
+// ─── OpenRouter Fallback ───────────────────────────────────────────────
+// Called only when Azure GPT returns 5xx, times out, or drops the connection.
+// Uses OpenAI-compatible /chat/completions — same request/response shape.
+
+const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_KEY   = process.env.OPENROUTER_API_KEY ?? '';
+const OPENROUTER_MODEL     = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o';
+
+async function callOpenRouterGPT(systemPrompt: string, userMessage: string): Promise<string> {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_NOT_CONFIGURED');
+
+  const res = await fetch(OPENROUTER_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://morodeutsch.com',
+      'X-Title': 'Morodeutsch AI Tutor',
+    },
+    signal: AbortSignal.timeout(25_000),
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: userMessage  },
+      ],
+      max_tokens: 1200,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OPENROUTER_HTTP_${res.status}: ${body.substring(0, 100)}`);
+  }
+
+  const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OPENROUTER_EMPTY_RESPONSE');
+  return content;
+}
+
+// Determines whether an Azure error warrants a provider fallback.
+// 4xx = client mistake; 429 = quota — both are wrong to retry on OpenRouter.
+function isAzureProviderFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const m = err.message;
+  return (
+    m === 'TIMEOUT' ||
+    m.startsWith('HTTP 5') ||        // Azure 5xx
+    err.name === 'TypeError'         // Network-level failure (DNS / connection refused)
+  );
+}
+
+async function callGPTWithFallback(
+  systemPrompt: string,
+  userMessage: string,
+  rlog: ReturnType<typeof import('@/lib/logger').createRequestLogger>,
+): Promise<{ content: string; provider: 'azure' | 'openrouter' }> {
+  try {
+    const content = await callAzureGPT(systemPrompt, userMessage);
+    return { content, provider: 'azure' };
+  } catch (azureErr) {
+    if (!isAzureProviderFailure(azureErr)) throw azureErr; // re-throw 4xx, 429, parse errors
+
+    rlog.warn('tutor.gpt.azure_failed_fallback_openrouter', {
+      reason: azureErr instanceof Error ? azureErr.message : String(azureErr),
+    });
+
+    // Attempt OpenRouter
+    try {
+      const content = await callOpenRouterGPT(systemPrompt, userMessage);
+      rlog.info('tutor.gpt.openrouter_fallback_succeeded');
+      return { content, provider: 'openrouter' };
+    } catch (orErr) {
+      rlog.error('tutor.gpt.openrouter_fallback_failed', orErr);
+      throw azureErr; // surface original Azure error to the user
+    }
+  }
+}
+
 // ─── System Prompts ────────────────────────────────────────────────────
 
 const CORRECTION_SYSTEM_PROMPT = `Du bist ein erfahrener Deutschtutor. Analysiere den Text des Schülers und antworte NUR mit diesem exakten JSON-Format (kein zusätzlicher Text):
@@ -512,11 +592,13 @@ export const POST = withApiGuard(
         });
 
         const gptStart = performance.now();
-        const gptResponse = await callAzureGPT(
+        const { content: gptResponse, provider: gptProvider } = await callGPTWithFallback(
           AUDIO_SYSTEM_PROMPT,
-          `Bitte korrigiere diese transkribierte deutsche Rede: ${transcribed}`
+          `Bitte korrigiere diese transkribierte deutsche Rede: ${transcribed}`,
+          rlog,
         );
         const gptDuration = performance.now() - gptStart;
+        if (gptProvider === 'openrouter') rlog.warn('tutor.audio.used_openrouter_fallback');
         
         result = parseCorrectionResult(gptResponse, transcribed, true);
         
@@ -561,8 +643,13 @@ export const POST = withApiGuard(
           : 'Bitte korrigiere diesen deutschen Text';
 
         const gptStart = performance.now();
-        const gptResponse = await callAzureGPT(systemPrompt, `${prefix}: ${inputText}`);
+        const { content: gptResponse, provider: gptProvider } = await callGPTWithFallback(
+          systemPrompt,
+          `${prefix}: ${inputText}`,
+          rlog,
+        );
         const gptDuration = performance.now() - gptStart;
+        if (gptProvider === 'openrouter') rlog.warn('tutor.text.used_openrouter_fallback');
 
         result = parseCorrectionResult(gptResponse, inputText, workflow === 'audio-correction');
 
