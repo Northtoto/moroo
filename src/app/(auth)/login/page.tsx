@@ -25,8 +25,23 @@ export default function LoginPage() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [existingUserEmail, setExistingUserEmail] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // Detect existing session — if ?switch=1 sign out immediately so any user can log in fresh
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('switch') === '1') {
+        await supabase.auth.signOut();
+      } else {
+        setExistingUserEmail(data.user.email ?? null);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const MAX_CLIENT_ATTEMPTS = 5;
   const LOCKOUT_MS = 15 * 60 * 1000;
@@ -87,6 +102,35 @@ export default function LoginPage() {
           boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
         }}
       >
+        {/* Existing-session banner */}
+        {existingUserEmail && (
+          <div
+            className="mb-6 rounded-xl p-4 flex items-center justify-between gap-3 text-sm animate-fade-up"
+            style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>
+              Angemeldet als <strong style={{ color: 'var(--amber)' }}>{existingUserEmail}</strong>
+            </span>
+            <div className="flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => router.push('/dashboard')}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{ background: 'var(--amber)', color: '#0a0c12' }}
+              >
+                Weiter
+              </button>
+              <a
+                href="/login?switch=1"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10"
+                style={{ color: 'var(--text-muted)', border: '1px solid var(--glass-border)' }}
+              >
+                Wechseln
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-8">
           <div

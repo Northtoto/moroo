@@ -49,7 +49,19 @@ async function checkRedis(): Promise<'ok' | 'down' | 'not_configured'> {
   }
 }
 
-export async function GET() {
+export async function GET(req: import('next/server').NextRequest) {
+  // Protect detailed health info from public reconnaissance.
+  // Unauthenticated callers get a minimal 200 — no service topology revealed.
+  const secret = process.env.GWS_INTERNAL_SECRET ?? process.env.HEALTH_SECRET;
+  if (secret) {
+    const provided =
+      req.headers.get('x-internal-secret') ??
+      req.headers.get('authorization')?.replace('Bearer ', '');
+    if (provided !== secret) {
+      return NextResponse.json({ status: 'ok' }, { status: 200 });
+    }
+  }
+
   const [database, redis, azure] = await Promise.all([
     checkSupabase(),
     checkRedis(),

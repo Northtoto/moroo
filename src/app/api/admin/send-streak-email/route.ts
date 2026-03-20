@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 function verifyInternalSecret(req: NextRequest): boolean {
   return req.headers.get('x-internal-secret') === process.env.GWS_INTERNAL_SECRET;
@@ -163,17 +166,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const gwsBody = JSON.stringify({ raw: rawBase64 });
-    const result = execSync(
-      `gws gmail users.messages.send --userId me --body '${gwsBody.replace(/'/g, "'\\''")}'`,
+    // Use execFile (array args) — never spawns a shell, immune to injection
+    const { stdout } = await execFileAsync(
+      'gws',
+      ['gmail', 'users.messages.send', '--userId', 'me', '--body', gwsBody],
       { encoding: 'utf8', timeout: 15000 }
     );
-    const parsed = JSON.parse(result);
+    const parsed = JSON.parse(stdout);
     return NextResponse.json({ success: true, messageId: parsed.id ?? 'sent' });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[send-streak-email] gws error:', message);
+    // Do NOT expose err.message — it may contain server internals / stderr
+    console.error('[send-streak-email] gws error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json(
-      { error: 'Failed to send streak email', detail: message },
+      { error: 'Failed to send streak email' },
       { status: 500 }
     );
   }

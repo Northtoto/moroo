@@ -152,7 +152,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ─── 3. Auth page redirect ────────────────────────────────────────────────
-  if (user && (pathname === '/login' || pathname === '/signup')) {
+  // Skip redirect if ?switch=1 — lets authenticated users explicitly switch accounts.
+  const wantsSwitch = request.nextUrl.searchParams.get('switch') === '1';
+  if (user && !wantsSwitch && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

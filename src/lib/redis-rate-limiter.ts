@@ -68,8 +68,10 @@ function getRedis(): Redis | null {
   if (!url || !token) {
     console.warn('[rate-limiter] UPSTASH env vars not set — using in-process fallback');
     _redis = null;
+    _redisConfigured = false;
     return null;
   }
+  _redisConfigured = true;
   _redis = new Redis({ url, token });
   return _redis;
 }
@@ -79,6 +81,9 @@ function getRedis(): Redis | null {
 // Returns true  → request is allowed
 // Returns false → request is rate-limited
 
+// Sentinel: true = Redis was configured (env vars present), false = not configured
+let _redisConfigured = false;
+
 export async function checkRateLimit(
   key: string,
   maxRequests: number,
@@ -87,6 +92,12 @@ export async function checkRateLimit(
   const redis = getRedis();
 
   if (!redis) {
+    if (_redisConfigured) {
+      // Redis was configured but client failed to init — fail closed in prod
+      console.error('[rate-limiter] Redis configured but unavailable — denying request (fail-closed)');
+      return false;
+    }
+    // No Redis configured at all (local dev) — use in-process fallback
     return fallbackCheck(key, maxRequests, windowSeconds);
   }
 
@@ -98,7 +109,12 @@ export async function checkRateLimit(
     )) as [number, number, number];
     return result[0] === 1;
   } catch (err) {
-    console.error('[rate-limiter] Redis unreachable, falling back to in-process:', err);
+    // Redis reachable but request failed — fail closed if in prod, fallback in dev
+    console.error('[rate-limiter] Redis error:', err);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[rate-limiter] Production: failing closed on Redis error');
+      return false;
+    }
     return fallbackCheck(key, maxRequests, windowSeconds);
   }
 }
