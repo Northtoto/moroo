@@ -8,6 +8,7 @@ import { withApiGuard } from '@/lib/api-guard';
 import { buildN8nContext, updateStudentModel, saveCorrectionHistory, type CorrectionResult } from '@/lib/student-model';
 import { updateAccuracy } from '@/lib/adaptive-engine';
 import { logger, createRequestLogger, generateRequestId } from '@/lib/logger';
+import * as Sentry from '@sentry/nextjs';
 
 const AZURE_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT ?? '';
 const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY ?? '';
@@ -705,6 +706,16 @@ export const POST = withApiGuard(
         workflow: (contentType.includes('multipart') ? 'audio' : 'text/json'),
         userId: user.id,
       });
+
+      // Send to Sentry — beforeSend in sentry.server.config.ts auto-fingerprints
+      // Whisper / GPT / TTS errors by message pattern so they group correctly.
+      if (code !== 'VALIDATION_ERROR' && code !== 'RATE_LIMIT') {
+        Sentry.captureException(err, {
+          tags: { pipeline: contentType.includes('multipart') ? 'audio' : 'text', errorCode: code },
+          user: { id: user.id },
+          extra: { requestId, workflow: contentType.includes('multipart') ? 'audio' : 'text/json' },
+        });
+      }
 
       // Map error codes to HTTP status codes
       const statusMap: Record<string, number> = {
