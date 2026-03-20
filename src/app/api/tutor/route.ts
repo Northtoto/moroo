@@ -5,9 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withApiGuard } from '@/lib/api-guard';
-import { buildN8nContext, updateStudentModel, type CorrectionResult } from '@/lib/student-model';
+import { buildN8nContext, updateStudentModel, saveCorrectionHistory, type CorrectionResult } from '@/lib/student-model';
 import { updateAccuracy } from '@/lib/adaptive-engine';
-import { logger } from '@/lib/logger';
+import { logger, createRequestLogger, generateRequestId } from '@/lib/logger';
 
 const AZURE_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT ?? '';
 const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY ?? '';
@@ -446,8 +446,10 @@ export const POST = withApiGuard(
   async (req: NextRequest, ctx) => {
     const user = ctx.user!;
     const contentType = req.headers.get('content-type') ?? '';
+    const requestId = generateRequestId();
+    const rlog = createRequestLogger(requestId);
 
-    logger.info('tutor.request', { userId: user.id, contentType });
+    rlog.info('tutor.request', { userId: user.id, contentType });
 
     if (!AZURE_ENDPOINT || !AZURE_API_KEY) {
       return NextResponse.json(
@@ -468,12 +470,14 @@ export const POST = withApiGuard(
     try {
       let result: CorrectionResult;
       let workflow: string;
+      let sessionId: string | undefined;
 
       if (contentType.includes('multipart/form-data')) {
         // AUDIO CORRECTION
         console.log('[tutor] Parsing multipart formdata for audio workflow');
         const formData = await req.formData();
         workflow = formData.get('workflow') as string;
+        sessionId = (formData.get('session_id') as string | null) ?? undefined;
 
         if (!workflow || !ALLOWED_WORKFLOWS.includes(workflow as Workflow)) {
           return NextResponse.json({ error: 'Invalid workflow' }, { status: 400 });
@@ -575,8 +579,9 @@ export const POST = withApiGuard(
       const wasCorrect = !result.error_categories || result.error_categories.length === 0;
       updateStudentModel(user.id, result, tomContext.native_language as string).catch(console.error);
       updateAccuracy(user.id, wasCorrect).catch(console.error);
+      saveCorrectionHistory(user.id, workflow, result, sessionId).catch(console.error);
 
-      logger.info('tutor.request.completed', {
+      rlog.info('tutor.request.completed', {
         workflow,
         hasErrors: result.error_categories.length > 0,
         confidence: result.confidence,
@@ -590,7 +595,7 @@ export const POST = withApiGuard(
         ? 'image' 
         : 'text';
       
-      return NextResponse.json({ ...result, inputType });
+      return NextResponse.json({ ...result, inputType }, { headers: { 'X-Request-Id': requestId } });
 
     } catch (err: any) {
       // Determine which service failed based on error message
@@ -607,7 +612,7 @@ export const POST = withApiGuard(
 
       const { code, userMessage, logContext } = classifyError(err, errorSource);
 
-      logger.error('tutor.request.failed', err, {
+      rlog.error('tutor.request.failed', err, {
         errorCode: code,
         source: logContext.source,
         workflow: (contentType.includes('multipart') ? 'audio' : 'text/json'),

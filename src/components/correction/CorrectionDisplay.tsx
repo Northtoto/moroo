@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 
 interface CorrectionDisplayProps {
   original: string;
@@ -117,7 +117,7 @@ export default function CorrectionDisplay({
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const diff = computeDiff(original, corrected);
+  const diff = useMemo(() => computeDiff(original, corrected), [original, corrected]);
   const isCorrect = original.trim().toLowerCase() === corrected.trim().toLowerCase();
 
   // Count chars for total typewriter duration

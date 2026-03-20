@@ -284,6 +284,34 @@ Be specific and pedagogically insightful. Max 100 words.`;
   }
 }
 
+// ─── Persist correction to history ───────────────────────────────────────────
+// Fire-and-forget from /api/tutor — gives students a reviewable correction log.
+
+export async function saveCorrectionHistory(
+  userId: string,
+  workflow: string,
+  result: CorrectionResult,
+  sessionId?: string
+): Promise<void> {
+  try {
+    const supabase = getServiceClient();
+    await supabase.from('corrections_history').insert({
+      user_id: userId,
+      workflow,
+      original: result.original,
+      corrected: result.corrected,
+      error_type: result.error_type ?? null,
+      error_categories: result.error_categories ?? [],
+      cefr_estimate: result.cefr_estimate,
+      confidence: result.confidence ?? null,
+      explanation_de: result.explanation_de ?? null,
+      session_id: sessionId ?? null,
+    });
+  } catch (err) {
+    logger.error('student_model.history_save_failed', err, { userId, workflow });
+  }
+}
+
 // ─── Build n8n workflow context payload ──────────────────────────────────────
 // Called from /api/tutor to enrich the n8n webhook body with student context
 

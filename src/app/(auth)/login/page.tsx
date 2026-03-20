@@ -122,7 +122,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username"
               disabled={isLocked}
               placeholder="du@beispiel.de"
               className="w-full px-4 py-3 rounded-xl text-sm transition-all"
