@@ -135,12 +135,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (profile.approval_status === 'pending') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/approval-pending';
-      return NextResponse.redirect(url);
-    }
-
+    // Auto-approve mode: 'pending' users pass through (migration 021 sets default to 'approved')
+    // Only explicitly rejected accounts are blocked.
     if (profile.approval_status === 'rejected') {
       const url = request.nextUrl.clone();
       url.pathname = '/access-denied';

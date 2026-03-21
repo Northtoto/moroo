@@ -77,8 +77,8 @@ function SuccessView({ email }: { email: string }) {
         </p>
         {[
           'Click the link in your email to verify your address.',
-          'Your account will be reviewed to confirm your Skool community membership.',
-          'Once approved (typically within 1–2 hours), you will have full access.',
+          'You will be taken directly to your dashboard — no waiting.',
+          'Start practising German immediately with AI corrections, flashcards, and more.',
         ].map((step, i) => (
           <div key={i} className="flex items-start gap-3">
             <span
