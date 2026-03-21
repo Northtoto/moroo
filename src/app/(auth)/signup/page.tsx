@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
@@ -129,6 +130,9 @@ function SignupForm() {
   const [success, setSuccess]       = useState(false);
   const [loading, setLoading]       = useState(false);
 
+  const searchParams = useSearchParams();
+  const signupSource = searchParams.get('source') ?? undefined;
+
   const supabase = createClient();
   const strength = useMemo(() => getPasswordStrength(password), [password]);
 
@@ -167,6 +171,8 @@ function SignupForm() {
           full_name: fullName.trim(),
           learning_goal: goal,
           cefr_level: cefrLevel,
+          // Passed to handle_new_user() trigger via raw_user_meta_data->>'signup_source'
+          ...(signupSource ? { signup_source: signupSource } : {}),
         },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
