@@ -1,0 +1,23 @@
+{
+  "framework": "nextjs",
+  "functions": {
+    "src/app/api/tutor/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/tutor/tts/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/flashcards/review/route.ts": {
+      "maxDuration": 15
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}
