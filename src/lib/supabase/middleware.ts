@@ -144,6 +144,27 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    // Premium gate — these routes require an active premium subscription
+    const PREMIUM_PATHS = ['/dashboard', '/tutor', '/courses', '/flashcards', '/progress'];
+    const needsPremium = PREMIUM_PATHS.some(p => pathname.startsWith(p));
+
+    if (needsPremium) {
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('tier, status')
+        .eq('user_id', user.id)
+        .single();
+
+      const isPremium = sub?.status === 'active' && sub?.tier === 'premium';
+
+      if (!isPremium) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = '/pricing';
+        redirectUrl.searchParams.set('reason', 'premium_required');
+        return NextResponse.redirect(redirectUrl);
+      }
+    }
+
     return supabaseResponse;
   }
 
