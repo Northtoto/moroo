@@ -7,6 +7,16 @@ import Link from 'next/link';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Goal = 'tourism' | 'work' | 'university' | 'family';
+type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
+const CEFR_LEVELS: { id: CefrLevel; label: string }[] = [
+  { id: 'A1', label: 'Beginner' },
+  { id: 'A2', label: 'Elementary' },
+  { id: 'B1', label: 'Intermediate' },
+  { id: 'B2', label: 'Upper-Int.' },
+  { id: 'C1', label: 'Advanced' },
+  { id: 'C2', label: 'Proficient' },
+];
 
 interface GoalOption {
   id: Goal;
@@ -113,6 +123,7 @@ function SignupForm() {
   const [email, setEmail]           = useState('');
   const [password, setPassword]     = useState('');
   const [goal, setGoal]             = useState<Goal | null>(null);
+  const [cefrLevel, setCefrLevel]   = useState<CefrLevel | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]           = useState('');
   const [success, setSuccess]       = useState(false);
@@ -126,6 +137,7 @@ function SignupForm() {
     email.trim().length > 0 &&
     strength.score >= 3 &&
     goal !== null &&
+    cefrLevel !== null &&
     !loading;
 
   async function handleSignup(e: React.FormEvent) {
@@ -154,6 +166,7 @@ function SignupForm() {
         data: {
           full_name: fullName.trim(),
           learning_goal: goal,
+          cefr_level: cefrLevel,
         },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
@@ -383,6 +396,50 @@ function SignupForm() {
                       </svg>
                     </span>
                   )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── CEFR Level Picker ── */}
+        <div className="space-y-2">
+          <label
+            className="block text-xs font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Mein Deutschniveau
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {CEFR_LEVELS.map((c) => {
+              const selected = cefrLevel === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCefrLevel(c.id)}
+                  className="flex flex-col items-center gap-0.5 py-2.5 px-2 rounded-xl text-center transition-all duration-200"
+                  style={{
+                    background: selected ? 'var(--amber-glow)' : 'var(--glass-bg)',
+                    border: selected
+                      ? '1px solid rgba(245,158,11,0.35)'
+                      : '1px solid var(--glass-border)',
+                    boxShadow: selected ? '0 0 12px rgba(245,158,11,0.12)' : 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    className="text-sm font-bold"
+                    style={{
+                      color: selected ? 'var(--amber)' : 'var(--text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {c.id}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                    {c.label}
+                  </span>
                 </button>
               );
             })}

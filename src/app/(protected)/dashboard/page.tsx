@@ -58,6 +58,27 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {/* First-session onboarding banner — shown only on first visit (no corrections yet) */}
+      {!recentMessages?.length && (
+        <div className="rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 border border-blue-500/25 bg-gradient-to-r from-blue-600/10 to-indigo-600/5">
+          <div className="text-3xl flex-shrink-0">👋</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-semibold text-sm">
+              Herzlich willkommen! Bereit für deine erste KI-Korrektur?
+            </p>
+            <p className="text-slate-400 text-xs mt-0.5">
+              Schreib oder sprich einen deutschen Satz — dein KI-Tutor korrigiert ihn sofort.
+            </p>
+          </div>
+          <Link
+            href="/tutor"
+            className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 transition-colors whitespace-nowrap"
+          >
+            Jetzt starten →
+          </Link>
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
