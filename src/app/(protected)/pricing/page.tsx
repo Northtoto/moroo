@@ -137,6 +137,7 @@ export default function PricingPage() {
   }
 
   const activeTier = currentSub?.tier ?? 'free';
+  const reason = searchParams.get('reason');
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 16px' }}>
@@ -288,6 +289,35 @@ export default function PricingPage() {
         <p>Alle Pläne beinhalten eine 7-tägige Geld-zurück-Garantie.</p>
         <p style={{ marginTop: 4 }}>Fragen? <a href="mailto:support@morodeutsch.com" style={{ color: '#f59e0b' }}>support@morodeutsch.com</a></p>
       </div>
+
+      {/* Skool community block — shown when redirected from a premium-gated page */}
+      {reason === 'premium_required' && (
+        <div className="mt-8 p-6 border border-blue-200 rounded-xl bg-blue-50 text-center max-w-lg mx-auto">
+          <h3 className="text-lg font-semibold text-blue-900 mb-2">
+            Bereits Mitglied der Skool-Community?
+          </h3>
+          <p className="text-blue-700 text-sm mb-4">
+            Wenn du in unserer Skool-Community «marodeutsh» bezahlt hast,
+            erstelle deinen Account mit <strong>derselben E-Mail-Adresse</strong>.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a
+              href={process.env.NEXT_PUBLIC_SKOOL_COMMUNITY_URL ?? 'https://www.skool.com/marodeutsh'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
+            >
+              Zur Skool-Community →
+            </a>
+            <a
+              href="/welcome?source=skool"
+              className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm font-medium"
+            >
+              Account verknüpfen
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
