@@ -1,0 +1,339 @@
+{
+  "name": "Morodeutsch — Daily Health Check",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "node-schedule-trigger",
+      "name": "Daily 08:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://morodeutsch.com/api/health",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "={{ $vars.HEALTH_SECRET }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-health-monitor/1.0"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "node-health-request",
+      "name": "GET /api/health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-status-ok",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "all"
+        },
+        "options": {}
+      },
+      "id": "node-if-health",
+      "name": "Health OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-db",
+              "name": "database",
+              "value": "={{ $json.checks?.database ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-redis",
+              "name": "redis",
+              "value": "={{ $json.checks?.redis ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-azure",
+              "name": "azure",
+              "value": "={{ $json.checks?.azure ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-status",
+              "name": "status",
+              "value": "={{ $json.status ?? 'unreachable' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-checkedAt",
+              "name": "checkedAt",
+              "value": "={{ $now.format('yyyy-MM-dd HH:mm:ss') }} UTC",
+              "type": "string"
+            },
+            {
+              "id": "assign-httpStatus",
+              "name": "httpStatus",
+              "value": "={{ $response?.statusCode ?? 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-health-fields",
+      "name": "Extract Health Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \":warning: *Morodeutsch Health Check FAILED*\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"⚠️ Health Check FAILED — {{ $json.checkedAt }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Overall Status*\\n`{{ $json.status }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*HTTP Status*\\n`{{ $json.httpStatus }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Database*\\n{{ $json.database === 'ok' ? ':white_check_mark:' : ':x:' }} `{{ $json.database }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Redis*\\n{{ $json.redis === 'ok' ? ':white_check_mark:' : ':x:' }} `{{ $json.redis }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Azure OpenAI*\\n{{ $json.azure === 'ok' ? ':white_check_mark:' : ':x:' }} `{{ $json.azure }}`\"\n        }\n      ]\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"Checked by n8n health monitor | <https://morodeutsch.com/api/health|View endpoint>\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-slack-health-alert",
+      "name": "Slack: Health Failure Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 180],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "node-noop-success",
+      "name": "No Operation (healthy)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [920, 440]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-error-status",
+              "name": "status",
+              "value": "unreachable",
+              "type": "string"
+            },
+            {
+              "id": "assign-error-database",
+              "name": "database",
+              "value": "unknown — request failed",
+              "type": "string"
+            },
+            {
+              "id": "assign-error-redis",
+              "name": "redis",
+              "value": "unknown — request failed",
+              "type": "string"
+            },
+            {
+              "id": "assign-error-azure",
+              "name": "azure",
+              "value": "unknown — request failed",
+              "type": "string"
+            },
+            {
+              "id": "assign-error-checkedAt",
+              "name": "checkedAt",
+              "value": "={{ $now.format('yyyy-MM-dd HH:mm:ss') }} UTC",
+              "type": "string"
+            },
+            {
+              "id": "assign-error-httpStatus",
+              "name": "httpStatus",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-unreachable",
+      "name": "Mark Unreachable",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \":rotating_light: *Morodeutsch UNREACHABLE*\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"🚨 UNREACHABLE — morodeutsch.com/api/health\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"The health endpoint did not respond at *{{ $json.checkedAt }}*. The app may be completely down.\\n\\n*Action required:* Check Vercel deployment status immediately.\"\n      }\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-slack-unreachable",
+      "name": "Slack: Unreachable Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 500],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 08:00 UTC": {
+      "main": [
+        [
+          {
+            "node": "GET /api/health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /api/health": {
+      "main": [
+        [
+          {
+            "node": "Health OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Mark Unreachable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health OK?": {
+      "main": [
+        [
+          {
+            "node": "Extract Health Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation (healthy)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Health Data": {
+      "main": [
+        [
+          {
+            "node": "Slack: Health Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Unreachable": {
+      "main": [
+        [
+          {
+            "node": "Slack: Unreachable Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-21T08:00:00.000Z",
+      "updatedAt": "2026-03-21T08:00:00.000Z",
+      "id": "tag-morodeutsch-monitoring",
+      "name": "morodeutsch-monitoring"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-21T08:00:00.000Z",
+  "versionId": "v1-daily-health-check"
+}

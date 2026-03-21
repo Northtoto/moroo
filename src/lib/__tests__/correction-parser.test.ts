@@ -37,8 +37,8 @@ describe('parseCorrectionResult', () => {
     expect(result.confidence).toBeGreaterThanOrEqual(0);
   });
 
-  it('throws INVALID_JSON_RESPONSE on garbage input', () => {
+  it('throws GPT_FAILED on garbage input (no JSON structure)', () => {
     expect(() => parseCorrectionResult('not json at all !!!', 'test', false))
-      .toThrow('INVALID_JSON_RESPONSE');
+      .toThrow('GPT_FAILED');
   });
 });

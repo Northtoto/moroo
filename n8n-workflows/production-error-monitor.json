@@ -1,0 +1,333 @@
+{
+  "name": "Morodeutsch — Production Error Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sentry-errors",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-sentry",
+      "name": "Sentry Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "sentry-errors-morodeutsch"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-error-level",
+              "leftValue": "={{ $json.body.data.issue.level }}",
+              "rightValue": "error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-fatal-level",
+              "leftValue": "={{ $json.body.data.issue.level }}",
+              "rightValue": "fatal",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "any"
+        },
+        "options": {}
+      },
+      "id": "node-if-level",
+      "name": "Filter: error or fatal only",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "cond-audio",
+                    "leftValue": "={{ $json.body.data.issue.tags.pipeline }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "all"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "cond-text",
+                    "leftValue": "={{ $json.body.data.issue.tags.pipeline }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "all"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "fallbackOutput": "extra",
+        "options": {}
+      },
+      "id": "node-switch-pipeline",
+      "name": "Route by Pipeline",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-errorCode",
+              "name": "errorCode",
+              "value": "={{ $json.body.data.issue.tags?.errorCode ?? 'UNKNOWN' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-pipeline",
+              "name": "pipeline",
+              "value": "={{ $json.body.data.issue.tags?.pipeline ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-requestId",
+              "name": "requestId",
+              "value": "={{ $json.body.data.issue.extra?.requestId ?? 'n/a' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-userId",
+              "name": "userId",
+              "value": "={{ $json.body.data.issue.user?.id ?? 'anonymous' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-title",
+              "name": "title",
+              "value": "={{ $json.body.data.issue.title ?? 'Untitled Error' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-sentryUrl",
+              "name": "sentryUrl",
+              "value": "={{ $json.body.data.issue.web_url ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-level",
+              "name": "level",
+              "value": "={{ $json.body.data.issue.level ?? 'error' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-timestamp",
+              "name": "timestamp",
+              "value": "={{ $now.format('yyyy-MM-dd HH:mm:ss') }} UTC",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-fields",
+      "name": "Extract Error Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $json.level === 'fatal' ? ':rotating_light:' : ':warning:' }} *Morodeutsch {{ $json.level === 'fatal' ? 'FATAL' : 'Error' }}*\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"{{ $json.level === 'fatal' ? '🚨 FATAL' : '⚠️ Error' }}: {{ $json.pipeline.toUpperCase() }} Pipeline\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Error Title*\\n{{ $json.title }}\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Error Code*\\n`{{ $json.errorCode }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Pipeline*\\n`{{ $json.pipeline }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Level*\\n`{{ $json.level }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Request ID*\\n`{{ $json.requestId }}`\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*User ID*\\n`{{ $json.userId }}`\"\n        }\n      ]\n    },\n    {\n      \"type\": \"context\",\n      \"elements\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"Captured at {{ $json.timestamp }}\"\n        }\n      ]\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"View in Sentry\"\n          },\n          \"style\": \"danger\",\n          \"url\": \"{{ $json.sentryUrl }}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "node-slack-alert",
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"pipeline\": \"{{ $('Extract Error Fields').item.json.pipeline }}\", \"requestId\": \"{{ $('Extract Error Fields').item.json.requestId }}\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond to Sentry",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1380, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true, \"filtered\": true, \"reason\": \"level below threshold\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-filtered",
+      "name": "Respond (Filtered)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 460]
+    }
+  ],
+  "connections": {
+    "Sentry Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter: error or fatal only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: error or fatal only": {
+      "main": [
+        [
+          {
+            "node": "Route by Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (Filtered)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Extract Error Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Error Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Error Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error Fields": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond to Sentry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-21T08:00:00.000Z",
+      "updatedAt": "2026-03-21T08:00:00.000Z",
+      "id": "tag-morodeutsch-monitoring",
+      "name": "morodeutsch-monitoring"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-21T08:00:00.000Z",
+  "versionId": "v1-production-error-monitor"
+}
